@@ -42,7 +42,7 @@ async function saveStickyNow() {
 async function loadStickyNote() {
   try {
     stickyNote.innerHTML = sanitizeStickyHtml(await invoke("get_sticky_note"));
-    setStickyStatus("Saved locally");
+    setStickyStatus("\u5df2\u4fdd\u5b58\u5230\u672c\u5730");
     stickyNote.focus();
   } catch (error) {
     setStickyStatus(String(error), true);
@@ -51,11 +51,11 @@ async function loadStickyNote() {
 
 function queueSave() {
   clearTimeout(saveTimer);
-  setStickyStatus("Saving...");
+  setStickyStatus("\u6b63\u5728\u4fdd\u5b58...");
   saveTimer = setTimeout(async () => {
     try {
       await saveStickyNow();
-      setStickyStatus("Saved");
+      setStickyStatus("\u5df2\u4fdd\u5b58");
     } catch (error) {
       setStickyStatus(String(error), true);
     }
@@ -80,7 +80,7 @@ document.querySelector("#pinSticky").onclick = async (event) => {
   pinned = !pinned;
   await invoke("set_sticky_pinned", { pinned });
   event.currentTarget.classList.toggle("active", pinned);
-  setStickyStatus(pinned ? "Pinned" : "Unpinned");
+  setStickyStatus(pinned ? "\u5df2\u7f6e\u9876" : "\u5df2\u53d6\u6d88\u7f6e\u9876");
 };
 
 document.querySelectorAll("[data-command]").forEach((button) => {
@@ -93,7 +93,7 @@ document.querySelectorAll("[data-command]").forEach((button) => {
 
 document.querySelector("#screenShot").onclick = () => {
   stickyNote.focus();
-  document.execCommand("insertText", false, "[Screenshot placeholder]");
+  document.execCommand("insertText", false, "[\u5c4f\u5e55\u622a\u56fe\u5f85\u6dfb\u52a0]");
   queueSave();
 };
 
@@ -101,11 +101,11 @@ document.querySelector("#toRecord").onclick = async () => {
   clearTimeout(saveTimer);
   try {
     if (!noteText()) {
-      throw new Error("Sticky note is empty");
+      throw new Error("\u4fbf\u7b7e\u4e3a\u7a7a\uff0c\u4e0d\u80fd\u8f6c\u4e3a\u7075\u611f");
     }
     await saveStickyNow();
     await invoke("sticky_to_record");
-    setStickyStatus("Converted. Syncing to Notion");
+    setStickyStatus("\u5df2\u8f6c\u4e3a\u7075\u611f\uff0c\u6b63\u5728\u540c\u6b65 Notion");
   } catch (error) {
     setStickyStatus(String(error), true);
   }
