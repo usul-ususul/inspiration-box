@@ -34,13 +34,15 @@ function sanitizeStickyHtml(html) {
 }
 
 async function saveStickyNow() {
-  await invoke("save_sticky_note", { content: sanitizeStickyHtml(stickyNote.innerHTML) });
+  await invoke("save_sticky_note", {
+    content: sanitizeStickyHtml(stickyNote.innerHTML),
+  });
 }
 
 async function loadStickyNote() {
   try {
     stickyNote.innerHTML = sanitizeStickyHtml(await invoke("get_sticky_note"));
-    setStickyStatus("已保存到本地");
+    setStickyStatus("Saved locally");
     stickyNote.focus();
   } catch (error) {
     setStickyStatus(String(error), true);
@@ -49,11 +51,11 @@ async function loadStickyNote() {
 
 function queueSave() {
   clearTimeout(saveTimer);
-  setStickyStatus("正在保存...");
+  setStickyStatus("Saving...");
   saveTimer = setTimeout(async () => {
     try {
       await saveStickyNow();
-      setStickyStatus("已保存");
+      setStickyStatus("Saved");
     } catch (error) {
       setStickyStatus(String(error), true);
     }
@@ -78,20 +80,20 @@ document.querySelector("#pinSticky").onclick = async (event) => {
   pinned = !pinned;
   await invoke("set_sticky_pinned", { pinned });
   event.currentTarget.classList.toggle("active", pinned);
-  setStickyStatus(pinned ? "已置顶" : "已取消置顶");
+  setStickyStatus(pinned ? "Pinned" : "Unpinned");
 };
 
 document.querySelectorAll("[data-command]").forEach((button) => {
   button.onclick = () => {
     stickyNote.focus();
-    document.execCommand(button.dataset.command, false);
+    document.execCommand(button.dataset.command, false, null);
     queueSave();
   };
 });
 
 document.querySelector("#screenShot").onclick = () => {
   stickyNote.focus();
-  document.execCommand("insertText", false, "[屏幕截图待添加]");
+  document.execCommand("insertText", false, "[Screenshot placeholder]");
   queueSave();
 };
 
@@ -99,11 +101,11 @@ document.querySelector("#toRecord").onclick = async () => {
   clearTimeout(saveTimer);
   try {
     if (!noteText()) {
-      throw new Error("便签为空，不能转为灵感");
+      throw new Error("Sticky note is empty");
     }
     await saveStickyNow();
     await invoke("sticky_to_record");
-    setStickyStatus("已转为灵感，正在同步 Notion");
+    setStickyStatus("Converted. Syncing to Notion");
   } catch (error) {
     setStickyStatus(String(error), true);
   }
