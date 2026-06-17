@@ -899,7 +899,7 @@ fn open_sticky_note(app: AppHandle) -> Result<(), String> {
     };
     let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App(sticky_url.into()))
         .title("便签")
-        .inner_size(360.0, 380.0)
+        .inner_size(360.0, 375.0)
         .resizable(true)
         .decorations(false)
         .always_on_top(true)
@@ -934,7 +934,7 @@ fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
 
 fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Result<String, String> {
     const NORMAL_WIDTH: u32 = 360;
-    const NORMAL_HEIGHT: u32 = 380;
+    const NORMAL_HEIGHT: u32 = 375;
     const EDGE_VISIBLE: i32 = 12;
 
     let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
