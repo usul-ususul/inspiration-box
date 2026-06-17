@@ -841,11 +841,9 @@ fn open_details(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn open_sticky_note(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("sticky") {
-        window.show().ok();
-        window.set_focus().ok();
-        return Ok(());
+        window.destroy().ok();
     }
-    WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App("sticky.html".into()))
+    let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App("sticky.html".into()))
         .title("便签")
         .inner_size(360.0, 380.0)
         .resizable(true)
@@ -854,6 +852,18 @@ fn open_sticky_note(app: AppHandle) -> Result<(), String> {
         .skip_taskbar(false)
         .build()
         .map_err(|error| error.to_string())?;
+    if let Some(monitor) = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten())
+    {
+        let position = monitor.position();
+        window
+            .set_position(PhysicalPosition::new(position.x + 96, position.y + 96))
+            .ok();
+    }
+    window.set_focus().ok();
     Ok(())
 }
 

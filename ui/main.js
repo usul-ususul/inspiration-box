@@ -124,7 +124,14 @@ document.querySelector("#expand").onclick = () => {
   toggle();
 };
 
-document.querySelector("#sticky").onclick = () => invoke("open_sticky_note");
+document.querySelector("#sticky").onclick = async () => {
+  try {
+    await invoke("open_sticky_note");
+    setStatus("Note opened.");
+  } catch (error) {
+    setStatus(`Note failed: ${error}`, true);
+  }
+};
 
 document.querySelector("#details").onclick = async () => {
   await invoke("set_details_mode", { enabled: true });
