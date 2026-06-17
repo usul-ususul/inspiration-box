@@ -42,8 +42,15 @@ $latestJson = $latest | ConvertTo-Json -Depth 5
     [System.Text.UTF8Encoding]::new($false)
 )
 
-gh release view "v$Version" *> $null
-if ($LASTEXITCODE -eq 0) {
+$releaseExists = $false
+try {
+    gh release view "v$Version" 2>$null | Out-Null
+    $releaseExists = $LASTEXITCODE -eq 0
+} catch {
+    $releaseExists = $false
+}
+
+if ($releaseExists) {
     gh release upload "v$Version" $assetPath $signaturePath $latestJsonPath --clobber
     gh release edit "v$Version" --title "inspiration box v$Version" --notes $Notes
 } else {
