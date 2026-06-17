@@ -43,6 +43,7 @@ struct Record {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SaveInput {
     content: String,
     category: Option<String>,
@@ -727,13 +728,19 @@ async fn delete_from_notion(token: &str, block_ids: &str) -> Result<(), String> 
 
     let client = reqwest::Client::new();
     for id in ids {
-        client
+        let response = client
             .delete(format!("https://api.notion.com/v1/blocks/{id}"))
             .bearer_auth(token)
             .header("Notion-Version", NOTION_VERSION)
             .send()
             .await
-            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?;
+        // 404 表示 block 已经不存在（可能之前已删掉），视为成功
+        let status = response.status().as_u16();
+        if status == 404 {
+            continue;
+        }
+        response
             .error_for_status()
             .map_err(|error| error.to_string())?;
     }
@@ -778,23 +785,26 @@ async fn sync_loop(app: AppHandle) {
 
         if !token.is_empty() && !page.is_empty() {
             if let Some(record) = pending.first() {
-                let result = if record.action == "delete" {
-                    delete_from_notion(
+                let (result, is_delete) = if record.action == "delete" {
+                    (delete_from_notion(
                         &token,
                         record.notion_block_ids.as_deref().unwrap_or_default(),
                     )
                     .await
-                    .map(|_| Vec::new())
+                    .map(|_| Vec::new()), true)
                 } else {
-                    append_to_notion(&token, &page, record).await
+                    (append_to_notion(&token, &page, record).await, false)
                 };
-                let Ok(db) = state.db.lock() else {
-                    tokio::time::sleep(Duration::from_secs(8)).await;
-                    continue;
+                // 获取 DB 锁（失败则重试几次，避免 Notion 已删但本地没删）
+                let db = loop {
+                    if let Ok(db) = state.db.lock() {
+                        break db;
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
                 };
                 match result {
                     Ok(block_ids) => {
-                        if record.action == "delete" {
+                        if is_delete {
                             let _ = delete_local_record(&db, record);
                         } else {
                             let existing = record.notion_block_ids.as_deref().unwrap_or_default();
@@ -862,7 +872,7 @@ fn set_details_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_details(app: AppHandle) -> Result<(), String> {
+async fn open_details(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("details") {
         window.show().ok();
         window.set_focus().ok();
@@ -877,7 +887,7 @@ fn open_details(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_sticky_note(app: AppHandle) -> Result<(), String> {
+async fn open_sticky_note(app: AppHandle) -> Result<(), String> {
     let sticky_mode = app
         .try_state::<AppState>()
         .and_then(|state| {
@@ -899,7 +909,7 @@ fn open_sticky_note(app: AppHandle) -> Result<(), String> {
     };
     let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App(sticky_url.into()))
         .title("便签")
-        .inner_size(360.0, 375.0)
+        .inner_size(377.0, 377.0)
         .resizable(true)
         .decorations(false)
         .always_on_top(true)
@@ -933,8 +943,8 @@ fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
 }
 
 fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Result<String, String> {
-    const NORMAL_WIDTH: u32 = 360;
-    const NORMAL_HEIGHT: u32 = 375;
+    const NORMAL_WIDTH: u32 = 377;
+    const NORMAL_HEIGHT: u32 = 377;
     const EDGE_VISIBLE: i32 = 12;
 
     let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
@@ -1040,6 +1050,22 @@ fn set_sticky_edge_state(app: AppHandle, edge: String, collapsed: bool) -> Resul
 }
 
 #[tauri::command]
+fn close_sticky_note(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("sticky") {
+        window.hide().map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn minimize_sticky_note(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("sticky") {
+        window.minimize().map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_screen_clip() -> Result<(), String> {
     Command::new("explorer.exe")
         .arg("ms-screenclip:")
@@ -1138,6 +1164,8 @@ fn main() {
             open_sticky_note,
             set_sticky_pinned,
             set_sticky_edge_state,
+            close_sticky_note,
+            minimize_sticky_note,
             open_screen_clip,
             snap_main_window
         ])

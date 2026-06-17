@@ -21,7 +21,15 @@ function setStickyStatus(message, isError = false) {
 }
 
 function noteText() {
-  return stickyNote.innerText.replace(/\u00a0/g, " ").trim();
+  return stickyNote.innerText.replace(/ /g, " ").trim();
+}
+
+function updateFormatStates() {
+  document.querySelectorAll("[data-command]").forEach((btn) => {
+    try {
+      btn.classList.toggle("active", document.queryCommandState(btn.dataset.command));
+    } catch (_) {}
+  });
 }
 
 function sanitizeStickyHtml(html) {
@@ -115,6 +123,7 @@ async function applyStickyMode(mode, persist = false) {
       collapsed: true,
     });
     document.body.classList.add("sticky-collapsed");
+    // 额外延迟确保窗口位置在显示器切换等场景下正确
     setTimeout(() => {
       if (stickyMode === "edge") {
         invoke("set_sticky_edge_state", {
@@ -141,7 +150,7 @@ async function applyStickyMode(mode, persist = false) {
           .catch((error) => setStickyStatus(String(error), true));
       }
     }, 1500);
-    setStickyStatus("\u5df2\u5207\u6362\u5230\u5438\u8fb9\u9690\u85cf");
+    setStickyStatus("已切换到吸边隐藏");
     return;
   }
 
@@ -150,7 +159,7 @@ async function applyStickyMode(mode, persist = false) {
     collapsed: false,
   });
   document.body.classList.remove("sticky-collapsed");
-  setStickyStatus("\u5df2\u5207\u6362\u5230\u81ea\u7531\u62d6\u52a8");
+  setStickyStatus("已切换到自由拖动");
 }
 
 async function saveStickyNow() {
@@ -162,7 +171,7 @@ async function saveStickyNow() {
 async function loadStickyNote() {
   try {
     stickyNote.innerHTML = sanitizeStickyHtml(await invoke("get_sticky_note"));
-    setStickyStatus("\u5df2\u4fdd\u5b58\u5230\u672c\u5730");
+    setStickyStatus("已保存到本地");
     stickyNote.focus();
   } catch (error) {
     setStickyStatus(String(error), true);
@@ -171,11 +180,11 @@ async function loadStickyNote() {
 
 function queueSave() {
   clearTimeout(saveTimer);
-  setStickyStatus("\u6b63\u5728\u4fdd\u5b58...");
+  setStickyStatus("正在保存...");
   saveTimer = setTimeout(async () => {
     try {
       await saveStickyNow();
-      setStickyStatus("\u5df2\u4fdd\u5b58");
+      setStickyStatus("已保存");
     } catch (error) {
       setStickyStatus(String(error), true);
     }
@@ -202,20 +211,35 @@ stickyNote.addEventListener("paste", (event) => {
   document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
 });
 
-document.querySelector("#stickyDrag").addEventListener("mousedown", async (event) => {
-  if (event.button !== 0 || event.target.closest("button")) return;
-  isDraggingSticky = true;
-  await expandFromEdge();
-  await appWindow.startDragging();
-  isDraggingSticky = false;
-  if (stickyMode === "edge") {
-    stickyEdge = "nearest";
-    scheduleCollapse();
+// ====== 拖拽：纯 JS 实现，手动检测避开按钮 ======
+document.querySelector("#stickyDrag").addEventListener("mousedown", (event) => {
+  if (event.button !== 0) return;
+  // 手动遍历 DOM 树检测是否点击在按钮上（不用 closest，避免 WebView2 兼容问题）
+  let el = event.target;
+  while (el && el !== event.currentTarget) {
+    if (el.tagName === "BUTTON") return;
+    el = el.parentElement;
   }
+  isDraggingSticky = true;
+  expandFromEdge().then(() => {
+    appWindow.startDragging().finally(() => {
+      isDraggingSticky = false;
+      if (stickyMode === "edge") {
+        stickyEdge = "nearest";
+        scheduleCollapse();
+      }
+    });
+  });
 });
 
-document.querySelector("#closeSticky").onclick = () => appWindow.hide();
-document.querySelector("#minSticky").onclick = () => appWindow.minimize();
+// ====== 标题栏按钮事件 ======
+// 暴露给 HTML 内联 onclick 使用
+window.hideSticky = () => {
+  appWindow.hide();
+};
+window.minimizeSticky = () => {
+  appWindow.minimize();
+};
 
 stickyMenuButton.onclick = (event) => {
   event.stopPropagation();
@@ -232,26 +256,30 @@ document.querySelector("#pinSticky").onclick = async (event) => {
   pinned = !pinned;
   await invoke("set_sticky_pinned", { pinned });
   event.currentTarget.classList.toggle("active", pinned);
-  setStickyStatus(pinned ? "\u5df2\u7f6e\u9876" : "\u5df2\u53d6\u6d88\u7f6e\u9876");
+  setStickyStatus(pinned ? "已置顶" : "已取消置顶");
 };
 
+// ====== 格式化工具栏按钮 ======
 document.querySelectorAll("[data-command]").forEach((button) => {
   button.onclick = () => {
     stickyNote.focus();
     document.execCommand(button.dataset.command, false, null);
+    updateFormatStates();
     queueSave();
   };
 });
 
+// ====== 颜色按钮 ======
 document.querySelectorAll(".sticky-swatch").forEach((button) => {
   button.onclick = () => {
     applyStickyColor(button.dataset.color);
     stickyMenu.hidden = true;
-    setStickyStatus("\u5df2\u66f4\u6362\u989c\u8272");
+    setStickyStatus("已更换颜色");
     stickyNote.focus();
   };
 });
 
+// ====== 模式切换按钮 ======
 document.querySelectorAll(".sticky-mode-option").forEach((button) => {
   button.onclick = async () => {
     try {
@@ -264,12 +292,14 @@ document.querySelectorAll(".sticky-mode-option").forEach((button) => {
   };
 });
 
+// ====== 截图按钮 ======
 document.querySelector("#screenShot").onclick = () => {
   invoke("open_screen_clip")
-    .then(() => setStickyStatus("\u622a\u56fe\u540e\u6309 Ctrl+V \u7c98\u8d34\u5230\u4fbf\u7b7e"))
+    .then(() => setStickyStatus("截图后按 Ctrl+V 粘贴到便签"))
     .catch((error) => setStickyStatus(String(error), true));
 };
 
+// ====== 吸边悬浮展开/折叠 ======
 document.body.addEventListener("mouseenter", () => {
   expandFromEdge().catch((error) => setStickyStatus(String(error), true));
 });
@@ -278,26 +308,64 @@ document.body.addEventListener("mouseleave", () => {
   scheduleCollapse();
 });
 
+// ====== 监听模式变化事件 ======
 listen("sticky-mode-changed", (event) => {
   applyStickyMode(event.payload?.mode || "free", false).catch((error) => {
     setStickyStatus(String(error), true);
   });
 });
 
+// ====== 格式按钮状态更新 ======
+document.addEventListener("selectionchange", () => {
+  const sel = document.getSelection();
+  if (sel && sel.rangeCount > 0 && stickyNote.contains(sel.anchorNode)) {
+    updateFormatStates();
+  }
+});
+
+// ====== 快捷键 ======
+document.addEventListener("keydown", (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  const key = e.key.toLowerCase();
+  if (key === "b" && !e.shiftKey) {
+    e.preventDefault();
+    document.execCommand("bold");
+  } else if (key === "i" && !e.shiftKey) {
+    e.preventDefault();
+    document.execCommand("italic");
+  } else if (key === "u" && !e.shiftKey) {
+    e.preventDefault();
+    document.execCommand("underline");
+  } else if (key === "x" && e.shiftKey) {
+    e.preventDefault();
+    document.execCommand("strikeThrough");
+  } else if (key === "s" && !e.shiftKey) {
+    e.preventDefault();
+    document.querySelector("#toRecord").click();
+    return;
+  } else {
+    return;
+  }
+  updateFormatStates();
+  queueSave();
+});
+
+// ====== 转为灵感记录 ======
 document.querySelector("#toRecord").onclick = async () => {
   clearTimeout(saveTimer);
   try {
     if (!noteText()) {
-      throw new Error("\u4fbf\u7b7e\u4e3a\u7a7a\uff0c\u4e0d\u80fd\u8f6c\u4e3a\u7075\u611f");
+      throw new Error("便签为空，不能转为灵感");
     }
     await saveStickyNow();
     await invoke("sticky_to_record");
-    setStickyStatus("\u5df2\u8f6c\u4e3a\u7075\u611f\uff0c\u6b63\u5728\u540c\u6b65 Notion");
+    setStickyStatus("已转为灵感，正在同步 Notion");
   } catch (error) {
     setStickyStatus(String(error), true);
   }
 };
 
+// ====== 初始化：颜色 + 模式 + 加载内容 ======
 applyStickyColor(localStorage.getItem(colorKey) || defaultColor);
 const initialMode = new URLSearchParams(window.location.search).get("mode");
 (initialMode

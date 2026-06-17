@@ -10,7 +10,7 @@
     <div class="sticky-titlebar" id="stickyDrag">
       <button class="sticky-icon" id="stickyMenuButton" type="button" title="&#33756;&#21333;">&#9776;</button>
       <span class="sticky-spacer"></span>
-      <button class="sticky-icon" id="toRecord" type="button" title="&#36716;&#20026;&#28789;&#24863;">...</button>
+      <button class="sticky-icon sticky-to-record-btn" id="toRecord" type="button" title="&#20445;&#23384;&#20026;&#28789;&#24863;&#35760;&#24405; (Ctrl+S)">&#x1F4DD;</button>
       <button class="sticky-icon active" id="pinSticky" type="button" title="&#32622;&#39030;">&#8982;</button>
       <button class="sticky-icon" id="minSticky" type="button" title="&#26368;&#23567;&#21270;">&#8722;</button>
       <button class="sticky-icon" id="closeSticky" type="button" title="&#20851;&#38381;">&#215;</button>
@@ -40,15 +40,41 @@
     ></div>
 
     <div class="sticky-toolbar">
-      <button class="sticky-tool" type="button" data-command="bold" title="&#21152;&#31895;"><b>B</b></button>
-      <button class="sticky-tool" type="button" data-command="italic" title="&#26012;&#20307;"><i>I</i></button>
-      <button class="sticky-tool" type="button" data-command="underline" title="&#19979;&#21010;&#32447;"><u>U</u></button>
-      <button class="sticky-tool" type="button" data-command="strikeThrough" title="&#21024;&#38500;&#32447;"><s>S</s></button>
+      <button class="sticky-tool" type="button" data-command="bold" title="&#21152;&#31895; (Ctrl+B)"><b>B</b></button>
+      <button class="sticky-tool" type="button" data-command="italic" title="&#26012;&#20307; (Ctrl+I)"><i>I</i></button>
+      <button class="sticky-tool" type="button" data-command="underline" title="&#19979;&#21010;&#32447; (Ctrl+U)"><u>U</u></button>
+      <button class="sticky-tool" type="button" data-command="strikeThrough" title="&#21024;&#38500;&#32447; (Ctrl+Shift+X)"><s>S</s></button>
       <button class="sticky-tool" type="button" data-command="insertUnorderedList" title="&#21015;&#34920;">&#9776;</button>
       <button class="sticky-shot" id="screenShot" type="button">&#23631;&#24149;&#25130;&#22270;</button>
       <span class="sticky-status" id="stickyStatus">&#24050;&#20934;&#22791;</span>
     </div>
   </div>
-  <script src="sticky.js?v=edge-mode-1"></script>
+  <script>
+    // 关闭和最小化按钮 — 内联脚本，不依赖外部文件
+    (function() {
+      var w = window.__TAURI__.window.getCurrentWindow();
+      var invoke = window.__TAURI__.core.invoke;
+      var closeBtn = document.getElementById('closeSticky');
+      var minBtn = document.getElementById('minSticky');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+          // 先测最简单的 —— 调用 Rust 命令关闭窗口
+          invoke('close_sticky_note').catch(function(e) {
+            closeBtn.textContent = String(e).slice(0, 10);
+          });
+        });
+        closeBtn.title = '关闭 ✓';
+      }
+      if (minBtn) {
+        minBtn.addEventListener('click', function() {
+          invoke('minimize_sticky_note').catch(function(e) {
+            minBtn.textContent = String(e).slice(0, 10);
+          });
+        });
+        minBtn.title = '最小化 ✓';
+      }
+    })();
+  </script>
+  <script src="sticky.js"></script>
 </body>
 </html>

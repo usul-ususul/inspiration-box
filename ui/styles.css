@@ -350,6 +350,13 @@ textarea {
   cursor: move;
 }
 
+/* 吸边折叠状态：只露一条边 */
+.sticky-collapsed .sticky-titlebar,
+.sticky-collapsed .sticky-editor,
+.sticky-collapsed .sticky-toolbar {
+  display: none;
+}
+
 .sticky-spacer { flex: 1; }
 
 .sticky-icon {
@@ -520,6 +527,16 @@ textarea {
 }
 
 .sticky-tool:hover { background: var(--sticky-hover); }
+
+.sticky-tool.active {
+  background: var(--sticky-hover);
+  color: var(--sticky-text);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.sticky-to-record-btn {
+  font-size: 15px;
+}
 
 .sticky-shot {
   margin-left: auto;
