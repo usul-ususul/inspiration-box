@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+  <title>Details</title>
+</head>
+<body class="page">
+  <button class="window-close" id="closeDetails" type="button" title="Close">×</button>
+  <main>
+    <div class="toolbar">
+      <button class="secondary" id="back" type="button">&#36820;&#22238;&#28014;&#26465;</button>
+      <span class="status" id="detailNotice"></span>
+    </div>
+    <h1>&#28789;&#24863;&#35814;&#24773;</h1>
+    <div class="toolbar">
+      <input id="search" placeholder="Search records or category...">
+      <button class="primary" id="refresh" type="button">&#21047;&#26032;</button>
+    </div>
+    <div id="records"></div>
+
+    <section class="settings">
+      <h2>Notion &#35774;&#32622;</h2>
+      <label>Target page ID</label>
+      <input id="pageId" placeholder="Notion page ID">
+      <label>Integration token</label>
+      <input id="token" type="password" placeholder="Leave blank to keep saved token">
+      <label class="checkbox">
+        <input id="autostart" type="checkbox"> Start with Windows
+      </label>
+      <button class="primary" id="saveSettings" type="button">&#20445;&#23384;&#35774;&#32622;</button>
+      <span class="status" id="settingsStatus"></span>
+    </section>
+  </main>
+  <script src="details.js"></script>
+</body>
+</html>

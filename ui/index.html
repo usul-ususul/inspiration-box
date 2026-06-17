@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+  <title>灵感收集箱</title>
+</head>
+<body>
+  <div class="shell">
+    <div class="bar">
+      <button class="drag-handle" id="dragHandle" title="拖动浮条">⋮⋮</button>
+      <button class="icon" id="details" title="设置">⚙</button>
+      <button class="icon" id="expand" title="展开">＋</button>
+      <input id="quickInput" class="quick-input" placeholder="记录一下..." title="直接输入或粘贴，回车保存">
+    </div>
+    <section class="panel" id="panel" hidden>
+      <textarea id="content" placeholder="输入长文本..."></textarea>
+      <div class="preview" id="preview"><img id="previewImage" alt="待保存图片"></div>
+      <div class="actions">
+        <button class="secondary" id="image">添加图片</button>
+        <input id="file" type="file" accept="image/*" hidden>
+        <span class="spacer"></span>
+        <button class="primary" id="save">保存</button>
+      </div>
+      <p class="status" id="status">支持粘贴或拖入图片，保存后自动同步 Notion。</p>
+    </section>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
