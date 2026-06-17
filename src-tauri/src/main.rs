@@ -25,7 +25,7 @@ use tauri_plugin_updater::UpdaterExt;
 use uuid::Uuid;
 
 const NOTION_VERSION: &str = "2026-03-11";
-const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

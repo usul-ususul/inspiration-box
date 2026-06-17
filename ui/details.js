@@ -48,7 +48,7 @@ async function installAvailableUpdate() {
   } catch (error) {
     updateStatus.textContent = `更新失败：${String(error)}`;
     checkUpdateButton.disabled = false;
-    checkUpdateButton.textContent = "重新检查";
+    checkUpdateButton.textContent = "重新手动检测";
   }
 }
 
@@ -67,11 +67,11 @@ checkUpdateButton.addEventListener("click", async () => {
       showAvailableUpdate(result.version);
     } else {
       updateStatus.textContent = `当前已是最新版本 ${result.currentVersion}。`;
-      checkUpdateButton.textContent = "再次检查";
+      checkUpdateButton.textContent = "再次手动检测";
     }
   } catch (error) {
     updateStatus.textContent = `检查失败：${String(error)}`;
-    checkUpdateButton.textContent = "重新检查";
+    checkUpdateButton.textContent = "重新手动检测";
   } finally {
     checkUpdateButton.disabled = false;
   }

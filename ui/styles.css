@@ -164,11 +164,10 @@ textarea {
   align-items: center;
   justify-content: space-between;
   padding: 0 10px 0 16px;
-  background: #e8eff0;
-  border-bottom: 1px solid #d4dfe2;
-  color: #40565b;
+  background: #f4f7f8;
+  color: #687b80;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   user-select: none;
   cursor: move;
 }
