@@ -1,4 +1,5 @@
 const invoke = window.__TAURI__.core.invoke;
+const listen = window.__TAURI__.event.listen;
 const appWindow = window.__TAURI__.window.getCurrentWindow();
 
 const stickyNote = document.querySelector("#stickyNote");
@@ -7,6 +8,10 @@ const stickyMenu = document.querySelector("#stickyMenu");
 const stickyMenuButton = document.querySelector("#stickyMenuButton");
 let saveTimer = null;
 let pinned = true;
+let stickyMode = "free";
+let stickyEdge = "nearest";
+let collapseTimer = null;
+let isDraggingSticky = false;
 const colorKey = "inspiration-box.sticky-color";
 const defaultColor = "purple";
 
@@ -55,6 +60,97 @@ function applyStickyColor(colorName) {
   document.querySelectorAll(".sticky-swatch").forEach((button) => {
     button.classList.toggle("active", button.dataset.color === color);
   });
+}
+
+function setModeButtons(mode) {
+  document.querySelectorAll(".sticky-mode-option").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === mode);
+  });
+}
+
+function clearCollapseTimer() {
+  clearTimeout(collapseTimer);
+  collapseTimer = null;
+}
+
+async function expandFromEdge() {
+  if (stickyMode !== "edge") return;
+  clearCollapseTimer();
+  stickyEdge = await invoke("set_sticky_edge_state", {
+    edge: stickyEdge,
+    collapsed: false,
+  });
+  document.body.classList.remove("sticky-collapsed");
+}
+
+function scheduleCollapse() {
+  if (stickyMode !== "edge" || isDraggingSticky) return;
+  clearCollapseTimer();
+  collapseTimer = setTimeout(async () => {
+    try {
+      stickyEdge = await invoke("set_sticky_edge_state", {
+        edge: stickyEdge,
+        collapsed: true,
+      });
+      document.body.classList.add("sticky-collapsed");
+    } catch (error) {
+      setStickyStatus(String(error), true);
+    }
+  }, 500);
+}
+
+async function applyStickyMode(mode, persist = false) {
+  stickyMode = mode === "edge" ? "edge" : "free";
+  setModeButtons(stickyMode);
+  document.body.dataset.stickyMode = stickyMode;
+  clearCollapseTimer();
+
+  if (persist) {
+    await invoke("set_sticky_mode", { mode: stickyMode });
+  }
+
+  if (stickyMode === "edge") {
+    stickyEdge = await invoke("set_sticky_edge_state", {
+      edge: "nearest",
+      collapsed: true,
+    });
+    document.body.classList.add("sticky-collapsed");
+    setTimeout(() => {
+      if (stickyMode === "edge") {
+        invoke("set_sticky_edge_state", {
+          edge: stickyEdge,
+          collapsed: true,
+        })
+          .then((edge) => {
+            stickyEdge = edge;
+            document.body.classList.add("sticky-collapsed");
+          })
+          .catch((error) => setStickyStatus(String(error), true));
+      }
+    }, 700);
+    setTimeout(() => {
+      if (stickyMode === "edge") {
+        invoke("set_sticky_edge_state", {
+          edge: stickyEdge,
+          collapsed: true,
+        })
+          .then((edge) => {
+            stickyEdge = edge;
+            document.body.classList.add("sticky-collapsed");
+          })
+          .catch((error) => setStickyStatus(String(error), true));
+      }
+    }, 1500);
+    setStickyStatus("\u5df2\u5207\u6362\u5230\u5438\u8fb9\u9690\u85cf");
+    return;
+  }
+
+  await invoke("set_sticky_edge_state", {
+    edge: stickyEdge,
+    collapsed: false,
+  });
+  document.body.classList.remove("sticky-collapsed");
+  setStickyStatus("\u5df2\u5207\u6362\u5230\u81ea\u7531\u62d6\u52a8");
 }
 
 async function saveStickyNow() {
@@ -108,7 +204,14 @@ stickyNote.addEventListener("paste", (event) => {
 
 document.querySelector("#stickyDrag").addEventListener("mousedown", async (event) => {
   if (event.button !== 0 || event.target.closest("button")) return;
+  isDraggingSticky = true;
+  await expandFromEdge();
   await appWindow.startDragging();
+  isDraggingSticky = false;
+  if (stickyMode === "edge") {
+    stickyEdge = "nearest";
+    scheduleCollapse();
+  }
 });
 
 document.querySelector("#closeSticky").onclick = () => appWindow.hide();
@@ -149,11 +252,37 @@ document.querySelectorAll(".sticky-swatch").forEach((button) => {
   };
 });
 
+document.querySelectorAll(".sticky-mode-option").forEach((button) => {
+  button.onclick = async () => {
+    try {
+      await applyStickyMode(button.dataset.mode, true);
+      stickyMenu.hidden = true;
+      stickyNote.focus();
+    } catch (error) {
+      setStickyStatus(String(error), true);
+    }
+  };
+});
+
 document.querySelector("#screenShot").onclick = () => {
   invoke("open_screen_clip")
     .then(() => setStickyStatus("\u622a\u56fe\u540e\u6309 Ctrl+V \u7c98\u8d34\u5230\u4fbf\u7b7e"))
     .catch((error) => setStickyStatus(String(error), true));
 };
+
+document.body.addEventListener("mouseenter", () => {
+  expandFromEdge().catch((error) => setStickyStatus(String(error), true));
+});
+
+document.body.addEventListener("mouseleave", () => {
+  scheduleCollapse();
+});
+
+listen("sticky-mode-changed", (event) => {
+  applyStickyMode(event.payload?.mode || "free", false).catch((error) => {
+    setStickyStatus(String(error), true);
+  });
+});
 
 document.querySelector("#toRecord").onclick = async () => {
   clearTimeout(saveTimer);
@@ -170,4 +299,10 @@ document.querySelector("#toRecord").onclick = async () => {
 };
 
 applyStickyColor(localStorage.getItem(colorKey) || defaultColor);
+const initialMode = new URLSearchParams(window.location.search).get("mode");
+(initialMode
+  ? Promise.resolve(initialMode)
+  : invoke("get_sticky_mode"))
+  .then((mode) => applyStickyMode(mode, false))
+  .catch((error) => setStickyStatus(String(error), true));
 loadStickyNote();

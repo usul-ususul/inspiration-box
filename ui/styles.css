@@ -293,6 +293,30 @@ textarea {
   resize: vertical;
 }
 
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #cedadd;
+  border-radius: 9px;
+  background: #eef4f5;
+}
+
+.segment {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #40565b;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}
+
+.segment.active {
+  background: #3b7469;
+  color: #fff;
+}
+
 .sticky-body {
   margin: 0;
   background: transparent;
@@ -351,6 +375,7 @@ textarea {
   left: 8px;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 8px;
   border: 1px solid #00000018;
@@ -360,6 +385,12 @@ textarea {
 }
 
 .sticky-menu[hidden] { display: none; }
+
+.sticky-menu-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
 .sticky-swatch {
   width: 24px;
@@ -376,6 +407,27 @@ textarea {
 .sticky-swatch[data-color="blue"] { background: #b9d7f5; }
 .sticky-swatch[data-color="pink"] { background: #f4bfd2; }
 .sticky-swatch[data-color="gray"] { background: #dedede; }
+
+.sticky-mode-row {
+  border-top: 1px solid #00000018;
+  padding-top: 8px;
+}
+
+.sticky-mode-option {
+  border: 0;
+  border-radius: 6px;
+  background: #eef1f2;
+  color: #2f2638;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.sticky-mode-option.active {
+  background: var(--sticky-bar);
+  color: var(--sticky-text);
+}
 
 .sticky-body[data-sticky-color="yellow"] {
   --sticky-surface: #fff3a8;

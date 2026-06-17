@@ -11,6 +11,7 @@ const sections = {
 };
 const stickyEditor = document.querySelector("#stickyEditor");
 const stickySettingsStatus = document.querySelector("#stickySettingsStatus");
+const stickyModeButtons = document.querySelectorAll("#stickyModeControl .segment");
 
 const statusName = {
   pending: "Pending",
@@ -20,6 +21,7 @@ const statusName = {
 
 let stickySaveTimer = null;
 let stickyLoaded = false;
+let stickyModeLoaded = false;
 
 function showNotice(message) {
   if (noticeEl) noticeEl.textContent = message;
@@ -54,6 +56,12 @@ function showSection(name) {
   });
   if (name === "records") load();
   if (name === "sticky") loadSticky();
+}
+
+function setStickyModeButtons(mode) {
+  stickyModeButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === mode);
+  });
 }
 
 async function load() {
@@ -185,9 +193,15 @@ async function loadSettings() {
 }
 
 async function loadSticky() {
-  if (stickyLoaded) return;
+  if (stickyLoaded && stickyModeLoaded) return;
   try {
-    stickyEditor.value = await invoke("get_sticky_note");
+    if (!stickyLoaded) {
+      stickyEditor.value = await invoke("get_sticky_note");
+      stickyLoaded = true;
+    }
+    const stickyMode = await invoke("get_sticky_mode");
+    setStickyModeButtons(stickyMode === "edge" ? "edge" : "free");
+    stickyModeLoaded = true;
     stickyLoaded = true;
     stickySettingsStatus.textContent = "便签自动保存到本地。";
   } catch (error) {
@@ -208,6 +222,22 @@ stickyEditor.addEventListener("input", () => {
       stickySettingsStatus.className = "status error";
     }
   }, 400);
+});
+
+stickyModeButtons.forEach((button) => {
+  button.onclick = async () => {
+    const mode = button.dataset.mode;
+    try {
+      await invoke("set_sticky_mode", { mode });
+      setStickyModeButtons(mode);
+      stickySettingsStatus.textContent = mode === "edge"
+        ? "已切换到吸边隐藏。"
+        : "已切换到自由拖动。";
+    } catch (error) {
+      stickySettingsStatus.textContent = String(error);
+      stickySettingsStatus.className = "status error";
+    }
+  };
 });
 
 sectionTabs.forEach((tab) => {
@@ -241,6 +271,9 @@ showNotice("Details ready.");
 loadSettings();
 listen("records-changed", () => {
   if (!sections.records.hidden) load();
+});
+listen("sticky-mode-changed", (event) => {
+  setStickyModeButtons(event.payload?.mode === "edge" ? "edge" : "free");
 });
 setInterval(() => {
   if (!sections.records.hidden) load();

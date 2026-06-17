@@ -15,7 +15,8 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
 use uuid::Uuid;
@@ -281,6 +282,43 @@ fn save_sticky_note(content: String, state: State<AppState>) -> Result<(), Strin
             [content],
         )
         .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_sticky_mode(state: State<AppState>) -> String {
+    state
+        .db
+        .lock()
+        .map(|db| {
+            let mode = get_setting(&db, "sticky_mode");
+            if mode == "edge" {
+                "edge".to_string()
+            } else {
+                "free".to_string()
+            }
+        })
+        .unwrap_or_else(|_| "free".to_string())
+}
+
+#[tauri::command]
+fn set_sticky_mode(mode: String, app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let normalized = if mode == "edge" { "edge" } else { "free" };
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO settings(key,value)
+             VALUES('sticky_mode',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [normalized],
+        )
+        .map_err(|error| error.to_string())?;
+    if app.get_webview_window("sticky").is_some() {
+        let _ = apply_sticky_edge_state(&app, "nearest", normalized == "edge");
+    }
+    let _ = app.emit("sticky-mode-changed", json!({ "mode": normalized }));
     Ok(())
 }
 
@@ -840,10 +878,26 @@ fn open_details(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_sticky_note(app: AppHandle) -> Result<(), String> {
+    let sticky_mode = app
+        .try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .db
+                .lock()
+                .ok()
+                .map(|db| get_setting(&db, "sticky_mode"))
+        })
+        .filter(|mode| mode == "edge")
+        .unwrap_or_else(|| "free".to_string());
     if let Some(window) = app.get_webview_window("sticky") {
         window.destroy().ok();
     }
-    let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App("sticky.html".into()))
+    let sticky_url = if sticky_mode == "edge" {
+        "sticky.html?mode=edge".to_string()
+    } else {
+        "sticky.html".to_string()
+    };
+    let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App(sticky_url.into()))
         .title("便签")
         .inner_size(360.0, 380.0)
         .resizable(true)
@@ -864,6 +918,9 @@ fn open_sticky_note(app: AppHandle) -> Result<(), String> {
             .ok();
     }
     window.set_focus().ok();
+    if sticky_mode == "edge" {
+        let _ = apply_sticky_edge_state(&app, "nearest", true);
+    }
     Ok(())
 }
 
@@ -873,6 +930,113 @@ fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
     window
         .set_always_on_top(pinned)
         .map_err(|error| error.to_string())
+}
+
+fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Result<String, String> {
+    const NORMAL_WIDTH: u32 = 360;
+    const NORMAL_HEIGHT: u32 = 380;
+    const EDGE_VISIBLE: i32 = 12;
+
+    let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| app.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        window
+            .set_size(PhysicalSize::new(
+                if collapsed {
+                    EDGE_VISIBLE as u32
+                } else {
+                    NORMAL_WIDTH
+                },
+                NORMAL_HEIGHT,
+            ))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_position(PhysicalPosition::new(0, 96))
+            .map_err(|error| error.to_string())?;
+        return Ok("left".to_string());
+    };
+
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let left = monitor_position.x;
+    let top = monitor_position.y;
+    let right = left + monitor_size.width as i32;
+    let bottom = top + monitor_size.height as i32;
+    let width = NORMAL_WIDTH as i32;
+    let height = NORMAL_HEIGHT as i32;
+    let position = window
+        .outer_position()
+        .unwrap_or_else(|_| PhysicalPosition::new(left + 96, top + 96));
+    let center_x = position.x + width / 2;
+    let center_y = position.y + height / 2;
+
+    let normalized_edge = match edge {
+        "left" | "right" | "top" | "bottom" => edge,
+        _ => {
+            let distances = [
+                ("left", (position.x - left).abs()),
+                ("right", (right - (position.x + width)).abs()),
+                ("top", (position.y - top).abs()),
+                ("bottom", (bottom - (position.y + height)).abs()),
+            ];
+            distances
+                .iter()
+                .min_by_key(|(_, distance)| *distance)
+                .map(|(edge_name, _)| *edge_name)
+                .unwrap_or("left")
+        }
+    };
+
+    let expanded_left = match normalized_edge {
+        "left" => left,
+        "right" => right - width,
+        _ => center_x.clamp(left, right - width),
+    };
+    let expanded_top = match normalized_edge {
+        "top" => top,
+        "bottom" => bottom - height,
+        _ => center_y.clamp(top, bottom - height),
+    };
+
+    let (target_width, target_height, x, y) = if collapsed {
+        match normalized_edge {
+            "left" => (EDGE_VISIBLE as u32, NORMAL_HEIGHT, left, expanded_top),
+            "right" => (
+                EDGE_VISIBLE as u32,
+                NORMAL_HEIGHT,
+                right - EDGE_VISIBLE,
+                expanded_top,
+            ),
+            "top" => (NORMAL_WIDTH, EDGE_VISIBLE as u32, expanded_left, top),
+            "bottom" => (
+                NORMAL_WIDTH,
+                EDGE_VISIBLE as u32,
+                expanded_left,
+                bottom - EDGE_VISIBLE,
+            ),
+            _ => (EDGE_VISIBLE as u32, NORMAL_HEIGHT, left, expanded_top),
+        }
+    } else {
+        (NORMAL_WIDTH, NORMAL_HEIGHT, expanded_left, expanded_top)
+    };
+
+    window
+        .set_size(PhysicalSize::new(target_width, target_height))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())?;
+    window.show().ok();
+    window.set_focus().ok();
+    Ok(normalized_edge.to_string())
+}
+
+#[tauri::command]
+fn set_sticky_edge_state(app: AppHandle, edge: String, collapsed: bool) -> Result<String, String> {
+    apply_sticky_edge_state(&app, &edge, collapsed)
 }
 
 #[tauri::command]
@@ -962,6 +1126,8 @@ fn main() {
             retry_record,
             get_sticky_note,
             save_sticky_note,
+            get_sticky_mode,
+            set_sticky_mode,
             sticky_to_record,
             record_to_sticky,
             get_settings,
@@ -971,6 +1137,7 @@ fn main() {
             open_details,
             open_sticky_note,
             set_sticky_pinned,
+            set_sticky_edge_state,
             open_screen_clip,
             snap_main_window
         ])

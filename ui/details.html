@@ -49,6 +49,11 @@
     <section class="settings detail-section" id="stickySection" hidden>
       <h2>便签</h2>
       <textarea id="stickyEditor" class="settings-note" placeholder="编辑桌面便签内容..."></textarea>
+      <label>便签模式</label>
+      <div class="segmented" id="stickyModeControl">
+        <button class="segment active" type="button" data-mode="free">自由拖动</button>
+        <button class="segment" type="button" data-mode="edge">吸边隐藏</button>
+      </div>
       <div class="actions">
         <button class="secondary" id="openSticky" type="button">打开桌面便签</button>
         <span class="spacer"></span>
