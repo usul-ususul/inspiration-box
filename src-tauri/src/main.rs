@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use base64::Engine;
 use chrono::Utc;
 use image::ImageReader;
@@ -19,9 +21,20 @@ use tauri::{
     WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_updater::UpdaterExt;
 use uuid::Uuid;
 
 const NOTION_VERSION: &str = "2026-03-11";
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateStatus {
+    available: bool,
+    current_version: String,
+    version: Option<String>,
+    body: Option<String>,
+}
 
 struct AppState {
     db: Mutex<Connection>,
@@ -1125,6 +1138,67 @@ fn snap_main_window(app: AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn check_for_update(app: AppHandle) -> Result<UpdateStatus, String> {
+    let current_version = app.package_info().version.to_string();
+    let update = app
+        .updater()
+        .map_err(|error| error.to_string())?
+        .check()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(match update {
+        Some(update) => UpdateStatus {
+            available: true,
+            current_version,
+            version: Some(update.version),
+            body: update.body,
+        },
+        None => UpdateStatus {
+            available: false,
+            current_version,
+            version: None,
+            body: None,
+        },
+    })
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let update = app
+        .updater()
+        .map_err(|error| error.to_string())?
+        .check()
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or("当前已经是最新版本")?;
+
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|error| error.to_string())?;
+    app.restart();
+}
+
+async fn update_check_loop(app: AppHandle) {
+    tokio::time::sleep(Duration::from_secs(15)).await;
+    loop {
+        if let Ok(updater) = app.updater() {
+            if let Ok(Some(update)) = updater.check().await {
+                let _ = app.emit(
+                    "update-available",
+                    json!({
+                        "version": update.version,
+                        "body": update.body,
+                    }),
+                );
+            }
+        }
+        tokio::time::sleep(UPDATE_CHECK_INTERVAL).await;
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -1133,6 +1207,7 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
@@ -1142,6 +1217,7 @@ fn main() {
             });
             app.autolaunch().enable().ok();
             tauri::async_runtime::spawn(sync_loop(app.handle().clone()));
+            tauri::async_runtime::spawn(update_check_loop(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1167,7 +1243,9 @@ fn main() {
             close_sticky_note,
             minimize_sticky_note,
             open_screen_clip,
-            snap_main_window
+            snap_main_window,
+            check_for_update,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("应用启动失败");

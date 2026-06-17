@@ -1,6 +1,7 @@
 const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
 const convertFileSrc = window.__TAURI__.core.convertFileSrc;
+const appWindow = window.__TAURI__.window.getCurrentWindow();
 const recordsEl = document.querySelector("#records");
 const noticeEl = document.querySelector("#detailNotice");
 const sectionTabs = document.querySelectorAll(".section-tab");
@@ -12,6 +13,8 @@ const sections = {
 const stickyEditor = document.querySelector("#stickyEditor");
 const stickySettingsStatus = document.querySelector("#stickySettingsStatus");
 const stickyModeButtons = document.querySelectorAll("#stickyModeControl .segment");
+const checkUpdateButton = document.querySelector("#checkUpdate");
+const updateStatus = document.querySelector("#updateStatus");
 
 const statusName = {
   pending: "Pending",
@@ -22,6 +25,57 @@ const statusName = {
 let stickySaveTimer = null;
 let stickyLoaded = false;
 let stickyModeLoaded = false;
+let availableUpdateVersion = null;
+
+document.querySelector("#detailsDrag").addEventListener("mousedown", async (event) => {
+  if (event.button !== 0 || event.target.closest("button")) return;
+  await appWindow.startDragging();
+});
+
+function showAvailableUpdate(version) {
+  availableUpdateVersion = version;
+  updateStatus.textContent = `发现新版本 ${version}。`;
+  checkUpdateButton.textContent = "立即更新";
+}
+
+async function installAvailableUpdate() {
+  if (!window.confirm(`安装 inspiration box ${availableUpdateVersion} 并重启应用？`)) return;
+  checkUpdateButton.disabled = true;
+  checkUpdateButton.textContent = "正在更新...";
+  updateStatus.textContent = "正在下载并验证更新，请不要关闭应用。";
+  try {
+    await invoke("install_update");
+  } catch (error) {
+    updateStatus.textContent = `更新失败：${String(error)}`;
+    checkUpdateButton.disabled = false;
+    checkUpdateButton.textContent = "重新检查";
+  }
+}
+
+checkUpdateButton.addEventListener("click", async () => {
+  if (availableUpdateVersion) {
+    await installAvailableUpdate();
+    return;
+  }
+
+  checkUpdateButton.disabled = true;
+  checkUpdateButton.textContent = "检查中...";
+  updateStatus.textContent = "正在连接 GitHub Release...";
+  try {
+    const result = await invoke("check_for_update");
+    if (result.available) {
+      showAvailableUpdate(result.version);
+    } else {
+      updateStatus.textContent = `当前已是最新版本 ${result.currentVersion}。`;
+      checkUpdateButton.textContent = "再次检查";
+    }
+  } catch (error) {
+    updateStatus.textContent = `检查失败：${String(error)}`;
+    checkUpdateButton.textContent = "重新检查";
+  } finally {
+    checkUpdateButton.disabled = false;
+  }
+});
 
 function showNotice(message) {
   if (noticeEl) noticeEl.textContent = message;
@@ -274,6 +328,12 @@ listen("records-changed", () => {
 });
 listen("sticky-mode-changed", (event) => {
   setStickyModeButtons(event.payload?.mode === "edge" ? "edge" : "free");
+});
+
+listen("update-available", (event) => {
+  if (event.payload?.version) {
+    showAvailableUpdate(event.payload.version);
+  }
 });
 setInterval(() => {
   if (!sections.records.hidden) load();

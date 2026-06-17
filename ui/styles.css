@@ -147,7 +147,7 @@ textarea {
 .page {
   background: #f4f7f8;
   min-height: 100vh;
-  padding: 24px;
+  padding: 64px 24px 24px;
 }
 
 .page main {
@@ -155,21 +155,34 @@ textarea {
   margin: auto;
 }
 
-.window-close {
+.details-titlebar {
   position: fixed;
-  top: 10px;
-  right: 10px;
+  inset: 0 0 auto 0;
   z-index: 9999;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  background: #e8eff0;
+  border-bottom: 1px solid #d4dfe2;
+  color: #40565b;
+  font-size: 13px;
+  font-weight: 650;
+  user-select: none;
+  cursor: move;
+}
+
+.window-close {
   width: 34px;
   height: 34px;
   border: 0;
-  border-radius: 999px;
-  background: #e8eff0;
+  border-radius: 7px;
+  background: transparent;
   color: #40565b;
   font-size: 22px;
   line-height: 34px;
   cursor: pointer;
-  box-shadow: 0 4px 12px #26323822;
 }
 
 .window-close:hover {
@@ -253,6 +266,25 @@ textarea {
   border-radius: 9px;
   padding: 10px;
   background: white;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #dde6e8;
+}
+
+.update-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.update-row .status {
+  display: block;
 }
 
 .checkbox {

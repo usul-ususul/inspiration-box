@@ -6,7 +6,10 @@
   <title>设置</title>
 </head>
 <body class="page">
-  <button class="window-close" id="closeDetails" type="button" title="关闭">×</button>
+  <header class="details-titlebar" id="detailsDrag">
+    <span>inspiration box</span>
+    <button class="window-close" id="closeDetails" type="button" title="关闭">×</button>
+  </header>
   <main>
     <div class="toolbar">
       <button class="secondary" id="back" type="button">返回浮条</button>
@@ -35,6 +38,13 @@
       <input id="windowOpacity" type="range" min="0.35" max="1" step="0.05" value="1">
       <button class="primary" id="saveSettings" type="button">保存设置</button>
       <span class="status" id="settingsStatus"></span>
+      <div class="update-row">
+        <div>
+          <strong>应用更新</strong>
+          <span class="status" id="updateStatus">每 6 小时自动检查一次。</span>
+        </div>
+        <button class="secondary" id="checkUpdate" type="button">检查更新</button>
+      </div>
     </section>
 
     <section class="detail-section" id="recordsSection" hidden>
