@@ -34,6 +34,17 @@ function sanitizeStickyHtml(html) {
       }
     });
   });
+  template.content.querySelectorAll("img").forEach((image) => {
+    const source = image.getAttribute("src") || "";
+    if (!source.startsWith("data:image/")) {
+      image.remove();
+      return;
+    }
+    image.removeAttribute("width");
+    image.removeAttribute("height");
+    image.removeAttribute("style");
+    image.alt = image.alt || "sticky image";
+  });
   return template.innerHTML;
 }
 
@@ -77,6 +88,20 @@ function queueSave() {
 
 stickyNote.addEventListener("input", queueSave);
 stickyNote.addEventListener("paste", (event) => {
+  const imageItem = [...event.clipboardData.items].find((item) => item.type.startsWith("image/"));
+  if (imageItem) {
+    event.preventDefault();
+    const file = imageItem.getAsFile();
+    const reader = new FileReader();
+    reader.onload = () => {
+      stickyNote.focus();
+      document.execCommand("insertHTML", false, `<img src="${reader.result}" alt="sticky image">`);
+      queueSave();
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
   event.preventDefault();
   document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
 });
@@ -125,9 +150,9 @@ document.querySelectorAll(".sticky-swatch").forEach((button) => {
 });
 
 document.querySelector("#screenShot").onclick = () => {
-  stickyNote.focus();
-  document.execCommand("insertText", false, "[\u5c4f\u5e55\u622a\u56fe\u5f85\u6dfb\u52a0]");
-  queueSave();
+  invoke("open_screen_clip")
+    .then(() => setStickyStatus("\u622a\u56fe\u540e\u6309 Ctrl+V \u7c98\u8d34\u5230\u4fbf\u7b7e"))
+    .catch((error) => setStickyStatus(String(error), true));
 };
 
 document.querySelector("#toRecord").onclick = async () => {

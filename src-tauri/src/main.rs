@@ -10,6 +10,7 @@ use std::{
     fs,
     io::Cursor,
     path::{Path, PathBuf},
+    process::Command,
     sync::Mutex,
     time::Duration,
 };
@@ -865,6 +866,15 @@ fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_screen_clip() -> Result<(), String> {
+    Command::new("explorer.exe")
+        .arg("ms-screenclip:")
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn snap_main_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     let position = window.outer_position().map_err(|error| error.to_string())?;
@@ -951,6 +961,7 @@ fn main() {
             open_details,
             open_sticky_note,
             set_sticky_pinned,
+            open_screen_clip,
             snap_main_window
         ])
         .run(tauri::generate_context!())

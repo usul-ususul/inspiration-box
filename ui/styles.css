@@ -439,6 +439,14 @@ textarea {
   color: var(--sticky-muted);
 }
 
+.sticky-editor img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
 .sticky-toolbar {
   height: 48px;
   display: flex;
