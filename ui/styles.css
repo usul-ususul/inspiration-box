@@ -296,14 +296,20 @@ textarea {
 .sticky-body {
   margin: 0;
   background: transparent;
+  --sticky-surface: #f0e3ff;
+  --sticky-bar: #d8bbed;
+  --sticky-hover: #c9a8e5;
+  --sticky-text: #2f2638;
+  --sticky-muted: #756483;
+  --sticky-border: #bf9fde;
 }
 
 .sticky-shell {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #efe2ff;
-  border: 1px solid #c7a9e8;
+  background: var(--sticky-surface);
+  border: 1px solid var(--sticky-border);
   box-shadow: 0 10px 26px #26323828;
   overflow: hidden;
 }
@@ -314,8 +320,8 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  background: #d8bbed;
-  color: #32233f;
+  background: var(--sticky-bar);
+  color: var(--sticky-text);
   user-select: none;
   cursor: move;
 }
@@ -328,23 +334,100 @@ textarea {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #32233f;
-  font-size: 20px;
+  color: var(--sticky-text);
+  font-size: 19px;
   line-height: 24px;
   cursor: pointer;
 }
 
 .sticky-icon:hover,
 .sticky-icon.active {
-  background: #c9a8e5;
+  background: var(--sticky-hover);
+}
+
+.sticky-menu {
+  position: absolute;
+  top: 42px;
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #00000018;
+  border-radius: 8px;
+  background: #ffffffee;
+  box-shadow: 0 8px 22px #26323830;
+}
+
+.sticky-menu[hidden] { display: none; }
+
+.sticky-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sticky-swatch.active { border-color: #2f2638; }
+.sticky-swatch[data-color="purple"] { background: #d8bbed; }
+.sticky-swatch[data-color="yellow"] { background: #f8e58c; }
+.sticky-swatch[data-color="green"] { background: #bfe5c8; }
+.sticky-swatch[data-color="blue"] { background: #b9d7f5; }
+.sticky-swatch[data-color="pink"] { background: #f4bfd2; }
+.sticky-swatch[data-color="gray"] { background: #dedede; }
+
+.sticky-body[data-sticky-color="yellow"] {
+  --sticky-surface: #fff3a8;
+  --sticky-bar: #f3dc70;
+  --sticky-hover: #e7cf59;
+  --sticky-text: #3c3215;
+  --sticky-muted: #74662d;
+  --sticky-border: #dfc653;
+}
+
+.sticky-body[data-sticky-color="green"] {
+  --sticky-surface: #d9f2df;
+  --sticky-bar: #b8e2c2;
+  --sticky-hover: #a4d5b0;
+  --sticky-text: #1f3828;
+  --sticky-muted: #557260;
+  --sticky-border: #9cccaa;
+}
+
+.sticky-body[data-sticky-color="blue"] {
+  --sticky-surface: #d9ebff;
+  --sticky-bar: #b8d8f5;
+  --sticky-hover: #a3caee;
+  --sticky-text: #1f3348;
+  --sticky-muted: #57708a;
+  --sticky-border: #9ec2e4;
+}
+
+.sticky-body[data-sticky-color="pink"] {
+  --sticky-surface: #ffe1eb;
+  --sticky-bar: #f3bfd1;
+  --sticky-hover: #e8aabc;
+  --sticky-text: #432633;
+  --sticky-muted: #80576a;
+  --sticky-border: #dda1b5;
+}
+
+.sticky-body[data-sticky-color="gray"] {
+  --sticky-surface: #f1f1f1;
+  --sticky-bar: #dedede;
+  --sticky-hover: #cfcfcf;
+  --sticky-text: #303030;
+  --sticky-muted: #666;
+  --sticky-border: #c9c9c9;
 }
 
 .sticky-editor {
   flex: 1;
   overflow: auto;
   padding: 18px 14px;
-  background: #efe2ff;
-  color: #2f2638;
+  background: var(--sticky-surface);
+  color: var(--sticky-text);
   font-size: 17px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -353,7 +436,7 @@ textarea {
 
 .sticky-editor:empty::before {
   content: attr(data-placeholder);
-  color: #7b6b89;
+  color: var(--sticky-muted);
 }
 
 .sticky-toolbar {
@@ -362,7 +445,7 @@ textarea {
   align-items: center;
   gap: 10px;
   padding: 7px 9px;
-  background: #efe2ff;
+  background: var(--sticky-surface);
 }
 
 .sticky-tool {
@@ -371,19 +454,19 @@ textarea {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #5d4d67;
+  color: var(--sticky-muted);
   font-size: 17px;
   cursor: pointer;
 }
 
-.sticky-tool:hover { background: #dec7f2; }
+.sticky-tool:hover { background: var(--sticky-hover); }
 
 .sticky-shot {
   margin-left: auto;
-  border: 1px solid #4b3b58;
+  border: 1px solid var(--sticky-text);
   border-radius: 8px;
-  background: #f7efff;
-  color: #2f2638;
+  background: #ffffff55;
+  color: var(--sticky-text);
   padding: 8px 12px;
   font: inherit;
   font-size: 13px;

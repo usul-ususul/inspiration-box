@@ -3,8 +3,12 @@ const appWindow = window.__TAURI__.window.getCurrentWindow();
 
 const stickyNote = document.querySelector("#stickyNote");
 const stickyStatus = document.querySelector("#stickyStatus");
+const stickyMenu = document.querySelector("#stickyMenu");
+const stickyMenuButton = document.querySelector("#stickyMenuButton");
 let saveTimer = null;
 let pinned = true;
+const colorKey = "inspiration-box.sticky-color";
+const defaultColor = "purple";
 
 function setStickyStatus(message, isError = false) {
   stickyStatus.textContent = message;
@@ -31,6 +35,15 @@ function sanitizeStickyHtml(html) {
     });
   });
   return template.innerHTML;
+}
+
+function applyStickyColor(colorName) {
+  const color = colorName || defaultColor;
+  document.body.dataset.stickyColor = color;
+  localStorage.setItem(colorKey, color);
+  document.querySelectorAll(".sticky-swatch").forEach((button) => {
+    button.classList.toggle("active", button.dataset.color === color);
+  });
 }
 
 async function saveStickyNow() {
@@ -76,6 +89,17 @@ document.querySelector("#stickyDrag").addEventListener("mousedown", async (event
 document.querySelector("#closeSticky").onclick = () => appWindow.hide();
 document.querySelector("#minSticky").onclick = () => appWindow.minimize();
 
+stickyMenuButton.onclick = (event) => {
+  event.stopPropagation();
+  stickyMenu.hidden = !stickyMenu.hidden;
+};
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".sticky-menu") && event.target !== stickyMenuButton) {
+    stickyMenu.hidden = true;
+  }
+});
+
 document.querySelector("#pinSticky").onclick = async (event) => {
   pinned = !pinned;
   await invoke("set_sticky_pinned", { pinned });
@@ -88,6 +112,15 @@ document.querySelectorAll("[data-command]").forEach((button) => {
     stickyNote.focus();
     document.execCommand(button.dataset.command, false, null);
     queueSave();
+  };
+});
+
+document.querySelectorAll(".sticky-swatch").forEach((button) => {
+  button.onclick = () => {
+    applyStickyColor(button.dataset.color);
+    stickyMenu.hidden = true;
+    setStickyStatus("\u5df2\u66f4\u6362\u989c\u8272");
+    stickyNote.focus();
   };
 });
 
@@ -111,4 +144,5 @@ document.querySelector("#toRecord").onclick = async () => {
   }
 };
 
+applyStickyColor(localStorage.getItem(colorKey) || defaultColor);
 loadStickyNote();

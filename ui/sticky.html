@@ -8,12 +8,21 @@
 <body class="sticky-body">
   <div class="sticky-shell">
     <div class="sticky-titlebar" id="stickyDrag">
-      <button class="sticky-icon" type="button" title="&#33756;&#21333;">=</button>
+      <button class="sticky-icon" id="stickyMenuButton" type="button" title="&#33756;&#21333;">&#9776;</button>
       <span class="sticky-spacer"></span>
       <button class="sticky-icon" id="toRecord" type="button" title="&#36716;&#20026;&#28789;&#24863;">...</button>
-      <button class="sticky-icon active" id="pinSticky" type="button" title="&#32622;&#39030;">PIN</button>
-      <button class="sticky-icon" id="minSticky" type="button" title="&#26368;&#23567;&#21270;">-</button>
-      <button class="sticky-icon" id="closeSticky" type="button" title="&#20851;&#38381;">x</button>
+      <button class="sticky-icon active" id="pinSticky" type="button" title="&#32622;&#39030;">&#8982;</button>
+      <button class="sticky-icon" id="minSticky" type="button" title="&#26368;&#23567;&#21270;">&#8722;</button>
+      <button class="sticky-icon" id="closeSticky" type="button" title="&#20851;&#38381;">&#215;</button>
+    </div>
+
+    <div class="sticky-menu" id="stickyMenu" hidden>
+      <button class="sticky-swatch" type="button" data-color="purple" title="&#32043;&#33394;"></button>
+      <button class="sticky-swatch" type="button" data-color="yellow" title="&#40644;&#33394;"></button>
+      <button class="sticky-swatch" type="button" data-color="green" title="&#32511;&#33394;"></button>
+      <button class="sticky-swatch" type="button" data-color="blue" title="&#34013;&#33394;"></button>
+      <button class="sticky-swatch" type="button" data-color="pink" title="&#31881;&#33394;"></button>
+      <button class="sticky-swatch" type="button" data-color="gray" title="&#28784;&#33394;"></button>
     </div>
 
     <div
@@ -29,7 +38,7 @@
       <button class="sticky-tool" type="button" data-command="italic" title="&#26012;&#20307;"><i>I</i></button>
       <button class="sticky-tool" type="button" data-command="underline" title="&#19979;&#21010;&#32447;"><u>U</u></button>
       <button class="sticky-tool" type="button" data-command="strikeThrough" title="&#21024;&#38500;&#32447;"><s>S</s></button>
-      <button class="sticky-tool" type="button" data-command="insertUnorderedList" title="&#21015;&#34920;">-</button>
+      <button class="sticky-tool" type="button" data-command="insertUnorderedList" title="&#21015;&#34920;">&#9776;</button>
       <button class="sticky-shot" id="screenShot" type="button">&#23631;&#24149;&#25130;&#22270;</button>
       <span class="sticky-status" id="stickyStatus">&#24050;&#20934;&#22791;</span>
     </div>

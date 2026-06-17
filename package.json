@@ -8,6 +8,7 @@
     "build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.8.5"
+    "@tauri-apps/cli": "^2.8.5",
+    "playwright-core": "^1.61.0"
   }
 }
