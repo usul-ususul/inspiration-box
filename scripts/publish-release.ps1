@@ -16,7 +16,7 @@ $latestJsonPath = Join-Path $bundleDir "latest.json"
 
 if (-not (Test-Path -LiteralPath $sourceInstaller) -or
     -not (Test-Path -LiteralPath $sourceSignature)) {
-    throw "缺少签名构建产物，请先使用签名环境变量运行 npm run build。"
+    throw "Signed build artifacts are missing. Run npm run build with signing variables first."
 }
 
 Copy-Item -LiteralPath $sourceInstaller -Destination $assetPath -Force
@@ -35,8 +35,19 @@ $latest = [ordered]@{
         }
     }
 }
-$latest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -LiteralPath $latestJsonPath
+$latestJson = $latest | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText(
+    $latestJsonPath,
+    $latestJson,
+    [System.Text.UTF8Encoding]::new($false)
+)
 
-gh release create "v$Version" $assetPath $signaturePath $latestJsonPath `
-    --title "inspiration box v$Version" `
-    --notes $Notes
+gh release view "v$Version" *> $null
+if ($LASTEXITCODE -eq 0) {
+    gh release upload "v$Version" $assetPath $signaturePath $latestJsonPath --clobber
+    gh release edit "v$Version" --title "inspiration box v$Version" --notes $Notes
+} else {
+    gh release create "v$Version" $assetPath $signaturePath $latestJsonPath `
+        --title "inspiration box v$Version" `
+        --notes $Notes
+}
