@@ -13,7 +13,9 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder,
+};
 use tauri_plugin_autostart::ManagerExt;
 use uuid::Uuid;
 
@@ -156,7 +158,7 @@ fn save_record(input: SaveInput, state: State<AppState>) -> Result<String, Strin
     state
         .db
         .lock()
-        .unwrap()
+        .map_err(|error| error.to_string())?
         .execute(
             "INSERT INTO records(id,category,content,image_path,created_at,updated_at,status,action)
              VALUES(?1,?2,?3,?4,?5,?5,'pending','create')",
@@ -169,8 +171,9 @@ fn save_record(input: SaveInput, state: State<AppState>) -> Result<String, Strin
 #[tauri::command]
 fn list_records(search: String, state: State<AppState>) -> Result<Vec<Record>, String> {
     let pattern = format!("%{}%", search);
+    let db = state.db.lock().map_err(|error| error.to_string())?;
     rows(
-        &state.db.lock().unwrap(),
+        &db,
         "SELECT id,category,content,image_path,created_at,updated_at,status,error,action,notion_block_ids
          FROM records
          WHERE content LIKE ?1 OR IFNULL(category,'') LIKE ?1
@@ -184,7 +187,7 @@ fn update_record(id: String, content: String, state: State<AppState>) -> Result<
     state
         .db
         .lock()
-        .unwrap()
+        .map_err(|error| error.to_string())?
         .execute(
             "UPDATE records
              SET content=?2,updated_at=?3,status='pending',error=NULL,
@@ -198,7 +201,7 @@ fn update_record(id: String, content: String, state: State<AppState>) -> Result<
 
 #[tauri::command]
 fn delete_record(id: String, state: State<AppState>) -> Result<(), String> {
-    let db = state.db.lock().unwrap();
+    let db = state.db.lock().map_err(|error| error.to_string())?;
     let pending_create = db
         .query_row(
             "SELECT action='create' AND status!='synced' FROM records WHERE id=?1",
@@ -222,13 +225,13 @@ fn delete_record(id: String, state: State<AppState>) -> Result<(), String> {
     }
 
     db.execute(
-            "UPDATE records
+        "UPDATE records
              SET updated_at=?2,status='pending',error=NULL,
                  action='delete',attempts=0,next_retry_at=0
              WHERE id=?1",
-            params![id, Utc::now().to_rfc3339()],
-        )
-        .map_err(|error| error.to_string())?;
+        params![id, Utc::now().to_rfc3339()],
+    )
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -237,7 +240,7 @@ fn retry_record(id: String, state: State<AppState>) -> Result<(), String> {
     state
         .db
         .lock()
-        .unwrap()
+        .map_err(|error| error.to_string())?
         .execute(
             "UPDATE records
              SET status='pending',error=NULL,attempts=0,next_retry_at=0
@@ -256,15 +259,142 @@ fn get_setting(db: &Connection, key: &str) -> String {
 }
 
 #[tauri::command]
+fn get_sticky_note(state: State<AppState>) -> String {
+    state
+        .db
+        .lock()
+        .map(|db| get_setting(&db, "sticky_note"))
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn save_sticky_note(content: String, state: State<AppState>) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO settings(key,value)
+             VALUES('sticky_note',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [content],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn sticky_plain_text(input: &str) -> String {
+    let mut output = String::new();
+    let mut in_tag = false;
+    let mut entity = String::new();
+    let mut in_entity = false;
+
+    for char_value in input.chars() {
+        if in_tag {
+            if char_value == '>' {
+                in_tag = false;
+            }
+            continue;
+        }
+
+        if in_entity {
+            if char_value == ';' {
+                output.push_str(match entity.as_str() {
+                    "nbsp" => " ",
+                    "amp" => "&",
+                    "lt" => "<",
+                    "gt" => ">",
+                    "quot" => "\"",
+                    _ => "",
+                });
+                entity.clear();
+                in_entity = false;
+            } else {
+                entity.push(char_value);
+            }
+            continue;
+        }
+
+        match char_value {
+            '<' => in_tag = true,
+            '&' => in_entity = true,
+            _ => output.push(char_value),
+        }
+    }
+
+    output
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+#[tauri::command]
+fn sticky_to_record(state: State<AppState>) -> Result<String, String> {
+    let db = state.db.lock().map_err(|error| error.to_string())?;
+    let content = sticky_plain_text(&get_setting(&db, "sticky_note"));
+    drop(db);
+    if content.trim().is_empty() {
+        return Err("便签为空，不能转为灵感".into());
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO records(id,category,content,image_path,created_at,updated_at,status,action)
+             VALUES(?1,NULL,?2,NULL,?3,?3,'pending','create')",
+            params![id, content.trim(), now],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|error| error.to_string())?;
+    let content: String = db
+        .query_row("SELECT content FROM records WHERE id=?1", [&id], |row| {
+            row.get(0)
+        })
+        .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+         VALUES('sticky_note',?1)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [content],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let page_id = get_setting(&state.db.lock().unwrap(), "notion_page_id");
+    let (page_id, window_color, window_opacity) = state
+        .db
+        .lock()
+        .map(|db| {
+            (
+                get_setting(&db, "notion_page_id"),
+                get_setting(&db, "window_color"),
+                get_setting(&db, "window_opacity"),
+            )
+        })
+        .unwrap_or_default();
     let has_token = Entry::new("inspiration-inbox", "notion-token")
         .and_then(|entry| entry.get_password())
         .is_ok();
     json!({
         "pageId": page_id,
         "hasToken": has_token,
-        "autostart": app.autolaunch().is_enabled().unwrap_or(false)
+        "autostart": app.autolaunch().is_enabled().unwrap_or(false),
+        "windowColor": if window_color.is_empty() { "#f8fafb" } else { &window_color },
+        "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity }
     })
 }
 
@@ -274,19 +404,44 @@ fn save_settings(
     page_id: String,
     token: String,
     autostart: bool,
+    window_color: String,
+    window_opacity: String,
     state: State<AppState>,
 ) -> Result<(), String> {
-    state
-        .db
-        .lock()
-        .unwrap()
-        .execute(
-            "INSERT INTO settings(key,value)
+    let opacity = window_opacity
+        .parse::<f32>()
+        .unwrap_or(1.0)
+        .clamp(0.35, 1.0)
+        .to_string();
+    let color = if window_color.trim().is_empty() {
+        "#f8fafb".to_string()
+    } else {
+        window_color.trim().to_string()
+    };
+
+    let db = state.db.lock().map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
              VALUES('notion_page_id',?1)
              ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            [page_id],
-        )
-        .map_err(|error| error.to_string())?;
+        [page_id],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+         VALUES('window_color',?1)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [&color],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+         VALUES('window_opacity',?1)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [&opacity],
+    )
+    .map_err(|error| error.to_string())?;
+    drop(db);
 
     if !token.trim().is_empty() {
         Entry::new("inspiration-inbox", "notion-token")
@@ -300,7 +455,16 @@ fn save_settings(
     } else {
         app.autolaunch().disable()
     }
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+
+    let _ = app.emit(
+        "appearance-changed",
+        json!({
+            "windowColor": color,
+            "windowOpacity": opacity
+        }),
+    );
+    Ok(())
 }
 
 async fn ensure_category_page(
@@ -435,7 +599,7 @@ async fn append_to_notion(token: &str, page: &str, record: &Record) -> Result<Ve
         let bytes = fs::read(path).map_err(|error| error.to_string())?;
         let filename = Path::new(path)
             .file_name()
-            .unwrap()
+            .ok_or("图片文件名无效")?
             .to_string_lossy()
             .to_string();
         let upload: Value = client
@@ -462,13 +626,15 @@ async fn append_to_notion(token: &str, page: &str, record: &Record) -> Result<Ve
             ))
             .bearer_auth(token)
             .header("Notion-Version", NOTION_VERSION)
-            .multipart(multipart::Form::new().part(
-                "file",
-                multipart::Part::bytes(bytes)
-                    .file_name(filename)
-                    .mime_str("image/jpeg")
-                    .unwrap(),
-            ))
+            .multipart(
+                multipart::Form::new().part(
+                    "file",
+                    multipart::Part::bytes(bytes)
+                        .file_name(filename)
+                        .mime_str("image/jpeg")
+                        .map_err(|error| error.to_string())?,
+                ),
+            )
             .send()
             .await
             .map_err(|error| error.to_string())?
@@ -502,7 +668,8 @@ async fn append_to_notion(token: &str, page: &str, record: &Record) -> Result<Ve
 
     let ids = response["results"]
         .as_array()
-        .unwrap_or(&Vec::new())
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
         .iter()
         .filter_map(|block| block["id"].as_str().map(str::to_owned))
         .collect();
@@ -549,7 +716,10 @@ async fn sync_loop(app: AppHandle) {
             return;
         };
         let (token, page, pending) = {
-            let db = state.db.lock().unwrap();
+            let Ok(db) = state.db.lock() else {
+                tokio::time::sleep(Duration::from_secs(8)).await;
+                continue;
+            };
             let token = Entry::new("inspiration-inbox", "notion-token")
                 .and_then(|entry| entry.get_password())
                 .unwrap_or_default();
@@ -579,7 +749,10 @@ async fn sync_loop(app: AppHandle) {
                 } else {
                     append_to_notion(&token, &page, record).await
                 };
-                let db = state.db.lock().unwrap();
+                let Ok(db) = state.db.lock() else {
+                    tokio::time::sleep(Duration::from_secs(8)).await;
+                    continue;
+                };
                 match result {
                     Ok(block_ids) => {
                         if record.action == "delete" {
@@ -665,6 +838,33 @@ fn open_details(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_sticky_note(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("sticky") {
+        window.show().ok();
+        window.set_focus().ok();
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App("sticky.html".into()))
+        .title("便签")
+        .inner_size(360.0, 380.0)
+        .resizable(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(false)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
+    let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
+    window
+        .set_always_on_top(pinned)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn snap_main_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     let position = window.outer_position().map_err(|error| error.to_string())?;
@@ -698,18 +898,12 @@ fn snap_main_window(app: AppHandle) -> Result<(), String> {
 
     let margin = 8;
     let (x, y) = match nearest {
-        "left" => (
-            left + margin,
-            center_y.clamp(top + margin, bottom - margin),
-        ),
+        "left" => (left + margin, center_y.clamp(top + margin, bottom - margin)),
         "right" => (
             right - margin,
             center_y.clamp(top + margin, bottom - margin),
         ),
-        "top" => (
-            center_x.clamp(left + margin, right - margin),
-            top + margin,
-        ),
+        "top" => (center_x.clamp(left + margin, right - margin), top + margin),
         _ => (
             center_x.clamp(left + margin, right - margin),
             bottom - margin,
@@ -746,11 +940,17 @@ fn main() {
             update_record,
             delete_record,
             retry_record,
+            get_sticky_note,
+            save_sticky_note,
+            sticky_to_record,
+            record_to_sticky,
             get_settings,
             save_settings,
             set_expanded,
             set_details_mode,
             open_details,
+            open_sticky_note,
+            set_sticky_pinned,
             snap_main_window
         ])
         .run(tauri::generate_context!())

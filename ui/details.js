@@ -3,12 +3,23 @@ const listen = window.__TAURI__.event.listen;
 const convertFileSrc = window.__TAURI__.core.convertFileSrc;
 const recordsEl = document.querySelector("#records");
 const noticeEl = document.querySelector("#detailNotice");
+const sectionTabs = document.querySelectorAll(".section-tab");
+const sections = {
+  app: document.querySelector("#appSection"),
+  records: document.querySelector("#recordsSection"),
+  sticky: document.querySelector("#stickySection"),
+};
+const stickyEditor = document.querySelector("#stickyEditor");
+const stickySettingsStatus = document.querySelector("#stickySettingsStatus");
 
 const statusName = {
   pending: "Pending",
   failed: "Failed",
   synced: "Synced",
 };
+
+let stickySaveTimer = null;
+let stickyLoaded = false;
 
 function showNotice(message) {
   if (noticeEl) noticeEl.textContent = message;
@@ -34,6 +45,17 @@ async function goBack() {
   window.location.href = "index.html";
 }
 
+function showSection(name) {
+  sectionTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.section === name);
+  });
+  Object.entries(sections).forEach(([sectionName, section]) => {
+    section.hidden = sectionName !== name;
+  });
+  if (name === "records") load();
+  if (name === "sticky") loadSticky();
+}
+
 async function load() {
   try {
     const records = await invoke("list_records", {
@@ -55,7 +77,7 @@ async function load() {
         ? `<img src="${convertFileSrc(record.image_path)}" alt="record image">`
         : "";
       const retryHtml = record.status !== "synced"
-        ? `<button class="secondary" type="button" data-action="retry">&#37325;&#35797;&#21516;&#27493;</button>`
+        ? `<button class="secondary" type="button" data-action="retry">重试同步</button>`
         : "";
 
       return `<article class="record" data-id="${record.id}">
@@ -69,8 +91,9 @@ async function load() {
         ${imageHtml}
         ${record.error ? `<p class="error">${escapeHtml(record.error)}</p>` : ""}
         <div class="record-actions">
-          <button class="secondary" type="button" data-action="edit">&#32534;&#36753;</button>
-          <button class="secondary" type="button" data-action="delete">&#21024;&#38500;</button>
+          <button class="secondary" type="button" data-action="edit">编辑</button>
+          <button class="secondary" type="button" data-action="to-sticky">转便签</button>
+          <button class="secondary" type="button" data-action="delete">删除</button>
           ${retryHtml}
         </div>
       </article>`;
@@ -98,8 +121,8 @@ recordsEl.addEventListener("click", async (event) => {
     const oldText = contentEl.textContent;
     contentEl.innerHTML = `<textarea class="inline-editor">${escapeHtml(oldText)}</textarea>`;
     article.querySelector(".record-actions").innerHTML = `
-      <button class="secondary" type="button" data-action="save-edit">&#20445;&#23384;</button>
-      <button class="secondary" type="button" data-action="cancel-edit">&#21462;&#28040;</button>
+      <button class="secondary" type="button" data-action="save-edit">保存</button>
+      <button class="secondary" type="button" data-action="cancel-edit">取消</button>
     `;
     const editor = article.querySelector(".inline-editor");
     editor.focus();
@@ -133,6 +156,15 @@ recordsEl.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "to-sticky") {
+    await runAction("Converting to sticky note...", async () => {
+      await invoke("record_to_sticky", { id });
+      await invoke("open_sticky_note");
+      showNotice("已转为便签。");
+    });
+    return;
+  }
+
   if (action === "retry") {
     await runAction("Queueing retry...", async () => {
       await invoke("retry_record", { id });
@@ -146,12 +178,51 @@ async function loadSettings() {
   const data = await invoke("get_settings");
   document.querySelector("#pageId").value = data.pageId || "";
   document.querySelector("#autostart").checked = Boolean(data.autostart);
+  document.querySelector("#windowColor").value = data.windowColor || "#f8fafb";
+  document.querySelector("#windowOpacity").value = data.windowOpacity || "1";
+  document.querySelector("#opacityValue").textContent =
+    `${Math.round(Number(document.querySelector("#windowOpacity").value) * 100)}%`;
 }
+
+async function loadSticky() {
+  if (stickyLoaded) return;
+  try {
+    stickyEditor.value = await invoke("get_sticky_note");
+    stickyLoaded = true;
+    stickySettingsStatus.textContent = "便签自动保存到本地。";
+  } catch (error) {
+    stickySettingsStatus.textContent = String(error);
+    stickySettingsStatus.className = "status error";
+  }
+}
+
+stickyEditor.addEventListener("input", () => {
+  clearTimeout(stickySaveTimer);
+  stickySettingsStatus.textContent = "正在保存...";
+  stickySaveTimer = setTimeout(async () => {
+    try {
+      await invoke("save_sticky_note", { content: stickyEditor.value });
+      stickySettingsStatus.textContent = "已保存。";
+    } catch (error) {
+      stickySettingsStatus.textContent = String(error);
+      stickySettingsStatus.className = "status error";
+    }
+  }, 400);
+});
+
+sectionTabs.forEach((tab) => {
+  tab.onclick = () => showSection(tab.dataset.section);
+});
 
 document.querySelector("#back").onclick = goBack;
 document.querySelector("#closeDetails").onclick = goBack;
 document.querySelector("#refresh").onclick = load;
 document.querySelector("#search").oninput = load;
+document.querySelector("#openSticky").onclick = () => invoke("open_sticky_note");
+document.querySelector("#windowOpacity").oninput = (event) => {
+  document.querySelector("#opacityValue").textContent =
+    `${Math.round(Number(event.target.value) * 100)}%`;
+};
 
 document.querySelector("#saveSettings").onclick = async () => {
   await runAction("Saving settings...", async () => {
@@ -159,13 +230,18 @@ document.querySelector("#saveSettings").onclick = async () => {
       pageId: document.querySelector("#pageId").value.trim(),
       token: document.querySelector("#token").value,
       autostart: document.querySelector("#autostart").checked,
+      windowColor: document.querySelector("#windowColor").value,
+      windowOpacity: document.querySelector("#windowOpacity").value,
     });
-    document.querySelector("#settingsStatus").textContent = " Saved";
+    document.querySelector("#settingsStatus").textContent = "已保存";
   });
 };
 
 showNotice("Details ready.");
-load();
 loadSettings();
-listen("records-changed", load);
-setInterval(load, 3000);
+listen("records-changed", () => {
+  if (!sections.records.hidden) load();
+});
+setInterval(() => {
+  if (!sections.records.hidden) load();
+}, 3000);

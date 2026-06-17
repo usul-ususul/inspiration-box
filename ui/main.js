@@ -1,6 +1,8 @@
 const invoke = window.__TAURI__.core.invoke;
+const listen = window.__TAURI__.event.listen;
 const appWindow = window.__TAURI__.window.getCurrentWindow();
 
+const shell = document.querySelector(".shell");
 const panel = document.querySelector("#panel");
 const quickInput = document.querySelector("#quickInput");
 const content = document.querySelector("#content");
@@ -16,6 +18,31 @@ let pendingQuickContent = "";
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.className = isError ? "status error" : "status";
+}
+
+function hexToRgba(hex, opacity) {
+  const clean = String(hex || "#f8fafb").replace("#", "");
+  const value = clean.length === 3
+    ? clean.split("").map((char) => char + char).join("")
+    : clean.padEnd(6, "f").slice(0, 6);
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+  const alpha = Math.min(1, Math.max(0.35, Number(opacity || 1)));
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function applyAppearance(settings) {
+  shell.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
+  panel.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
+}
+
+async function loadAppearance() {
+  try {
+    applyAppearance(await invoke("get_settings"));
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 async function toggle(value = !expanded) {
@@ -97,6 +124,8 @@ document.querySelector("#expand").onclick = () => {
   toggle();
 };
 
+document.querySelector("#sticky").onclick = () => invoke("open_sticky_note");
+
 document.querySelector("#details").onclick = async () => {
   await invoke("set_details_mode", { enabled: true });
   window.location.href = "details.html";
@@ -144,4 +173,12 @@ document.addEventListener("drop", (event) => {
   loadImage(event.dataTransfer.files[0]);
 });
 
+listen("records-changed", async () => {
+  if (expanded && !content.value.trim() && !imageData) {
+    await toggle(false);
+  }
+});
+listen("appearance-changed", (event) => applyAppearance(event.payload || {}));
+
 resetQuickInput();
+loadAppearance();
