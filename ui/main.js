@@ -1,6 +1,5 @@
 const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
-const appWindow = window.__TAURI__.window.getCurrentWindow();
 
 const shell = document.querySelector(".shell");
 const panel = document.querySelector("#panel");
@@ -9,9 +8,12 @@ const content = document.querySelector("#content");
 const statusEl = document.querySelector("#status");
 const preview = document.querySelector("#preview");
 const previewImage = document.querySelector("#previewImage");
+const quickActions = document.querySelector("#quickActions");
+const moreButton = document.querySelector("#more");
 
 let imageData = null;
 let expanded = false;
+let actionsExpanded = sessionStorage.getItem("quickActionsExpanded") === "1";
 let quickStep = "content";
 let pendingQuickContent = "";
 
@@ -49,13 +51,22 @@ async function toggle(value = !expanded) {
   expanded = value;
   if (expanded) {
     panel.hidden = false;
-    await invoke("set_expanded", { expanded: true });
+    await invoke("set_expanded", { expanded: true, actionsExpanded });
     content.focus();
     return;
   }
   panel.hidden = true;
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await invoke("set_expanded", { expanded: false });
+  await invoke("set_expanded", { expanded: false, actionsExpanded });
+}
+
+async function toggleActions(value = !actionsExpanded) {
+  actionsExpanded = value;
+  sessionStorage.setItem("quickActionsExpanded", actionsExpanded ? "1" : "0");
+  quickActions.hidden = !actionsExpanded;
+  moreButton.classList.toggle("active", actionsExpanded);
+  moreButton.setAttribute("aria-expanded", String(actionsExpanded));
+  await invoke("set_expanded", { expanded, actionsExpanded });
 }
 
 function resetQuickInput() {
@@ -124,6 +135,8 @@ document.querySelector("#expand").onclick = () => {
   toggle();
 };
 
+moreButton.onclick = () => toggleActions();
+
 document.querySelector("#sticky").onclick = async () => {
   try {
     await invoke("open_sticky_note");
@@ -133,20 +146,16 @@ document.querySelector("#sticky").onclick = async () => {
   }
 };
 
+document.querySelector("#quitApp").onclick = () => invoke("quit_app");
+
 document.querySelector("#details").onclick = async () => {
-  await invoke("set_details_mode", { enabled: true });
+  await invoke("set_details_mode", { enabled: true, actionsExpanded });
   window.location.href = "details.html";
 };
 
 document.querySelector("#image").onclick = () => document.querySelector("#file").click();
 document.querySelector("#file").onchange = (event) => loadImage(event.target.files[0]);
 document.querySelector("#save").onclick = saveCurrentRecord;
-
-document.querySelector("#dragHandle").addEventListener("mousedown", async (event) => {
-  if (event.button !== 0) return;
-  await appWindow.startDragging();
-  setTimeout(() => invoke("snap_main_window"), 120);
-});
 
 quickInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && quickStep === "category") {
@@ -186,6 +195,18 @@ listen("records-changed", async () => {
   }
 });
 listen("appearance-changed", (event) => applyAppearance(event.payload || {}));
+listen("summon-floating-bar", () => {
+  quickInput.focus();
+  quickInput.select();
+});
 
 resetQuickInput();
 loadAppearance();
+quickActions.hidden = !actionsExpanded;
+moreButton.classList.toggle("active", actionsExpanded);
+moreButton.setAttribute("aria-expanded", String(actionsExpanded));
+invoke("set_expanded", { expanded, actionsExpanded });
+if (sessionStorage.getItem("focusQuickInput") === "1") {
+  sessionStorage.removeItem("focusQuickInput");
+  requestAnimationFrame(() => quickInput.focus());
+}

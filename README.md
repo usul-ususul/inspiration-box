@@ -1,4 +1,4 @@
-# 桌面灵感收集箱
+# ahhhh mmt
 
 轻量 Windows Tauri 应用：文字、语音转写和图片先保存到本地 SQLite，再自动追加到指定 Notion 页面。
 

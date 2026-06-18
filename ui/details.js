@@ -15,6 +15,8 @@ const stickySettingsStatus = document.querySelector("#stickySettingsStatus");
 const stickyModeButtons = document.querySelectorAll("#stickyModeControl .segment");
 const checkUpdateButton = document.querySelector("#checkUpdate");
 const updateStatus = document.querySelector("#updateStatus");
+const summonShortcutInput = document.querySelector("#summonShortcut");
+const shortcutStatus = document.querySelector("#shortcutStatus");
 
 const statusName = {
   pending: "Pending",
@@ -27,11 +29,6 @@ let stickyLoaded = false;
 let stickyModeLoaded = false;
 let availableUpdateVersion = null;
 
-document.querySelector("#detailsDrag").addEventListener("mousedown", async (event) => {
-  if (event.button !== 0 || event.target.closest("button")) return;
-  await appWindow.startDragging();
-});
-
 function showAvailableUpdate(version) {
   availableUpdateVersion = version;
   updateStatus.textContent = `发现新版本 ${version}。`;
@@ -39,7 +36,7 @@ function showAvailableUpdate(version) {
 }
 
 async function installAvailableUpdate() {
-  if (!window.confirm(`安装 inspiration box ${availableUpdateVersion} 并重启应用？`)) return;
+  if (!window.confirm(`安装 ahhhh mmt ${availableUpdateVersion} 并重启应用？`)) return;
   checkUpdateButton.disabled = true;
   checkUpdateButton.textContent = "正在更新...";
   updateStatus.textContent = "正在下载并验证更新，请不要关闭应用。";
@@ -87,6 +84,29 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function highlightSearchText(text, query) {
+  const source = String(text || "");
+  const needle = String(query || "").trim();
+  if (!needle) return escapeHtml(source);
+
+  const sourceLower = source.toLocaleLowerCase();
+  const needleLower = needle.toLocaleLowerCase();
+  const parts = [];
+  let cursor = 0;
+  let matchIndex = sourceLower.indexOf(needleLower, cursor);
+
+  while (matchIndex !== -1) {
+    parts.push(escapeHtml(source.slice(cursor, matchIndex)));
+    parts.push(`<mark class="search-highlight">${escapeHtml(
+      source.slice(matchIndex, matchIndex + needle.length),
+    )}</mark>`);
+    cursor = matchIndex + needle.length;
+    matchIndex = sourceLower.indexOf(needleLower, cursor);
+  }
+  parts.push(escapeHtml(source.slice(cursor)));
+  return parts.join("");
+}
+
 async function runAction(message, action) {
   showNotice(message);
   try {
@@ -97,9 +117,19 @@ async function runAction(message, action) {
 }
 
 async function goBack() {
-  await invoke("set_details_mode", { enabled: false });
+  const actionsExpanded = sessionStorage.getItem("quickActionsExpanded") === "1";
+  await invoke("set_details_mode", { enabled: false, actionsExpanded });
   window.location.href = "index.html";
 }
+
+appWindow.onFocusChanged(({ payload: focused }) => {
+  if (focused) return;
+  setTimeout(async () => {
+    if (!(await appWindow.isFocused())) {
+      await goBack();
+    }
+  }, 150);
+});
 
 function showSection(name) {
   sectionTabs.forEach((tab) => {
@@ -120,8 +150,9 @@ function setStickyModeButtons(mode) {
 
 async function load() {
   try {
+    const searchQuery = document.querySelector("#search").value.trim();
     const records = await invoke("list_records", {
-      search: document.querySelector("#search").value,
+      search: searchQuery,
     });
 
     if (!records.length) {
@@ -148,8 +179,8 @@ async function load() {
           <span>${statusName[record.status] || record.status}</span>
           <span>${actionText}</span>
         </div>
-        ${record.category ? `<span class="category">${escapeHtml(record.category)}</span>` : ""}
-        <div class="content">${escapeHtml(record.content)}</div>
+        ${record.category ? `<span class="category">${highlightSearchText(record.category, searchQuery)}</span>` : ""}
+        <div class="content">${highlightSearchText(record.content, searchQuery)}</div>
         ${imageHtml}
         ${record.error ? `<p class="error">${escapeHtml(record.error)}</p>` : ""}
         <div class="record-actions">
@@ -244,7 +275,54 @@ async function loadSettings() {
   document.querySelector("#windowOpacity").value = data.windowOpacity || "1";
   document.querySelector("#opacityValue").textContent =
     `${Math.round(Number(document.querySelector("#windowOpacity").value) * 100)}%`;
+  summonShortcutInput.value = await invoke("get_summon_shortcut");
 }
+
+function shortcutFromEvent(event) {
+  const modifierKeys = new Set(["Control", "Alt", "Shift", "Meta"]);
+  if (modifierKeys.has(event.key)) return null;
+
+  const parts = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  if (event.metaKey) parts.push("Super");
+  if (!parts.length) return null;
+
+  const keyNames = {
+    " ": "Space",
+    ArrowUp: "ArrowUp",
+    ArrowDown: "ArrowDown",
+    ArrowLeft: "ArrowLeft",
+    ArrowRight: "ArrowRight",
+    Escape: "Escape",
+    Enter: "Enter",
+    Tab: "Tab",
+  };
+  const key = keyNames[event.key]
+    || (event.key.length === 1 ? event.key.toUpperCase() : event.key);
+  parts.push(key);
+  return parts.join("+");
+}
+
+summonShortcutInput.addEventListener("keydown", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  const shortcut = shortcutFromEvent(event);
+  if (!shortcut) {
+    shortcutStatus.textContent = "请使用至少一个修饰键和一个普通按键。";
+    return;
+  }
+
+  shortcutStatus.textContent = "正在注册...";
+  try {
+    await invoke("set_summon_shortcut", { shortcut });
+    summonShortcutInput.value = shortcut;
+    shortcutStatus.textContent = "召唤快捷键已保存。";
+  } catch (error) {
+    shortcutStatus.textContent = String(error);
+  }
+});
 
 async function loadSticky() {
   if (stickyLoaded && stickyModeLoaded) return;
@@ -334,6 +412,13 @@ listen("update-available", (event) => {
   if (event.payload?.version) {
     showAvailableUpdate(event.payload.version);
   }
+});
+
+listen("summon-floating-bar", async () => {
+  sessionStorage.setItem("focusQuickInput", "1");
+  const actionsExpanded = sessionStorage.getItem("quickActionsExpanded") === "1";
+  await invoke("set_details_mode", { enabled: false, actionsExpanded });
+  window.location.href = "index.html";
 });
 setInterval(() => {
   if (!sections.records.hidden) load();

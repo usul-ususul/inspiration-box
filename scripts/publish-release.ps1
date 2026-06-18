@@ -1,15 +1,15 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
-    [string]$Notes = "inspiration box $Version"
+    [string]$Notes = "ahhhh mmt $Version"
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $bundleDir = Join-Path $repoRoot "src-tauri\target\release\bundle\nsis"
-$sourceInstaller = Join-Path $bundleDir "inspiration box_${Version}_x64-setup.exe"
+$sourceInstaller = Join-Path $bundleDir "ahhhh mmt_${Version}_x64-setup.exe"
 $sourceSignature = "$sourceInstaller.sig"
-$assetName = "inspiration-box_${Version}_x64-setup.exe"
+$assetName = "ahhhh-mmt_${Version}_x64-setup.exe"
 $assetPath = Join-Path $bundleDir $assetName
 $signaturePath = "$assetPath.sig"
 $latestJsonPath = Join-Path $bundleDir "latest.json"
@@ -52,9 +52,9 @@ try {
 
 if ($releaseExists) {
     gh release upload "v$Version" $assetPath $signaturePath $latestJsonPath --clobber
-    gh release edit "v$Version" --title "inspiration box v$Version" --notes $Notes
+    gh release edit "v$Version" --title "ahhhh mmt v$Version" --notes $Notes
 } else {
     gh release create "v$Version" $assetPath $signaturePath $latestJsonPath `
-        --title "inspiration box v$Version" `
+        --title "ahhhh mmt v$Version" `
         --notes $Notes
 }
