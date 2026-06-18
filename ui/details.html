@@ -6,8 +6,8 @@
   <title>设置</title>
 </head>
 <body class="page">
-  <header class="details-titlebar" id="detailsDrag">
-    <span>inspiration box</span>
+  <header class="details-titlebar" id="detailsDrag" data-tauri-drag-region>
+    <span data-tauri-drag-region>ahhhh mmt</span>
     <button class="window-close" id="closeDetails" type="button" title="关闭">×</button>
   </header>
   <main>
@@ -16,7 +16,7 @@
       <span class="status" id="detailNotice"></span>
     </div>
 
-    <h1>inspiration box</h1>
+    <h1>ahhhh mmt</h1>
     <nav class="section-tabs" aria-label="设置分类">
       <button class="section-tab active" type="button" data-section="app">应用设置</button>
       <button class="section-tab" type="button" data-section="records">本地灵感</button>
@@ -25,13 +25,16 @@
 
     <section class="settings detail-section" id="appSection">
       <h2>应用设置</h2>
-      <label>Notion 目标页 ID</label>
-      <input id="pageId" placeholder="Notion page ID">
+      <label>Notion 目标页链接</label>
+      <input id="pageId" placeholder="直接粘贴 Notion 页面链接或页面 ID">
       <label>Notion integration token</label>
       <input id="token" type="password" placeholder="留空则保留已保存 token">
       <label class="checkbox">
         <input id="autostart" type="checkbox"> 开机自启
       </label>
+      <label>召唤浮条快捷键</label>
+      <input id="summonShortcut" class="shortcut-input" readonly placeholder="按下组合键">
+      <span class="status" id="shortcutStatus"></span>
       <label>浮窗颜色</label>
       <input id="windowColor" type="color" value="#f8fafb">
       <label>浮窗透明度 <span id="opacityValue">100%</span></label>

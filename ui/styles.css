@@ -6,11 +6,19 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: transparent; }
 
+body:not(.page):not(.sticky-body) {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
 .shell {
+  width: 100%;
+  height: 100%;
   background: #f8fafb;
   border: 1px solid #dbe4e7;
   border-radius: 14px;
-  box-shadow: 0 8px 24px #26323824;
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -23,9 +31,49 @@ body { margin: 0; background: transparent; }
   user-select: none;
 }
 
+.more-button {
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.more-button.active {
+  background: #d8e5e7;
+  color: #263e43;
+}
+
+.quick-actions {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  user-select: none;
+}
+
+.quick-actions[hidden] {
+  display: none;
+}
+
+.quick-drag-region {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #687b80;
+  font-size: 17px;
+  line-height: 1;
+  cursor: move;
+}
+
 .quick-input {
-  flex: 1;
+  flex: 0 1 220px;
+  width: 220px;
   min-width: 0;
+  margin-left: auto;
   height: 30px;
   border: 1px solid #cedadd;
   border-radius: 9px;
@@ -75,6 +123,11 @@ body { margin: 0; background: transparent; }
   color: #40565b;
   font-size: 13px;
   font-weight: 700;
+}
+
+.power-button:hover {
+  background: #f2d8d8;
+  color: #a33131;
 }
 
 .primary {
@@ -234,6 +287,13 @@ textarea {
   margin: 12px 0;
 }
 
+.search-highlight {
+  background: #ffe56b;
+  color: #263238;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .record img {
   max-width: 240px;
   max-height: 180px;
@@ -265,6 +325,16 @@ textarea {
   border-radius: 9px;
   padding: 10px;
   background: white;
+}
+
+.shortcut-input {
+  cursor: pointer;
+  caret-color: transparent;
+}
+
+.shortcut-input:focus {
+  outline: 2px solid #8fc7bd;
+  border-color: #3b7469;
 }
 
 .update-row {
@@ -367,6 +437,7 @@ textarea {
   border: 1px solid var(--sticky-border);
   box-shadow: 0 10px 26px #26323828;
   overflow: hidden;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
 .sticky-titlebar {
@@ -400,11 +471,19 @@ textarea {
   font-size: 19px;
   line-height: 24px;
   cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .sticky-icon:hover,
 .sticky-icon.active {
   background: var(--sticky-hover);
+}
+
+.sticky-pin {
+  font-family: "Segoe UI Symbol", sans-serif;
+  font-size: 15px;
+  line-height: 1;
+  color: inherit;
 }
 
 .sticky-menu {
@@ -416,10 +495,12 @@ textarea {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  border: 1px solid #00000018;
+  border: 1px solid var(--sticky-border);
   border-radius: 8px;
-  background: #ffffffee;
+  background: var(--sticky-surface);
+  color: var(--sticky-text);
   box-shadow: 0 8px 22px #26323830;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
 .sticky-menu[hidden] { display: none; }
@@ -438,7 +519,7 @@ textarea {
   cursor: pointer;
 }
 
-.sticky-swatch.active { border-color: #2f2638; }
+.sticky-swatch.active { border-color: var(--sticky-text); }
 .sticky-swatch[data-color="purple"] { background: #d8bbed; }
 .sticky-swatch[data-color="yellow"] { background: #f8e58c; }
 .sticky-swatch[data-color="green"] { background: #bfe5c8; }
@@ -447,19 +528,25 @@ textarea {
 .sticky-swatch[data-color="gray"] { background: #dedede; }
 
 .sticky-mode-row {
-  border-top: 1px solid #00000018;
+  border-top: 1px solid var(--sticky-border);
   padding-top: 8px;
 }
 
 .sticky-mode-option {
-  border: 0;
+  border: 1px solid var(--sticky-border);
   border-radius: 6px;
-  background: #eef1f2;
-  color: #2f2638;
+  background: var(--sticky-surface);
+  color: var(--sticky-muted);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
   padding: 6px 8px;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.sticky-mode-option:hover {
+  background: var(--sticky-hover);
+  color: var(--sticky-text);
 }
 
 .sticky-mode-option.active {
@@ -544,6 +631,7 @@ textarea {
   gap: 10px;
   padding: 7px 9px;
   background: var(--sticky-surface);
+  transition: background-color 160ms ease;
 }
 
 .sticky-tool {
@@ -555,6 +643,7 @@ textarea {
   color: var(--sticky-muted);
   font-size: 17px;
   cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .sticky-tool:hover { background: var(--sticky-hover); }
@@ -565,20 +654,21 @@ textarea {
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
 }
 
-.sticky-to-record-btn {
-  font-size: 15px;
-}
-
 .sticky-shot {
   margin-left: auto;
   border: 1px solid var(--sticky-text);
   border-radius: 8px;
-  background: #ffffff55;
+  background: var(--sticky-bar);
   color: var(--sticky-text);
   padding: 8px 12px;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.sticky-shot:hover {
+  background: var(--sticky-hover);
 }
 
 .sticky-status { display: none; }

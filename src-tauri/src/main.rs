@@ -17,15 +17,17 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    AppHandle, Emitter, Manager, Monitor, PhysicalPosition, PhysicalSize, State, WebviewUrl,
     WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use uuid::Uuid;
 
 const NOTION_VERSION: &str = "2026-03-11";
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const DEFAULT_SUMMON_SHORTCUT: &str = "Ctrl+Alt+Space";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,6 +84,12 @@ fn init_db(path: &Path) -> Result<Connection, String> {
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sticky_notes (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
         );",
     )
     .map_err(|error| error.to_string())?;
@@ -284,6 +292,39 @@ fn get_sticky_note(state: State<AppState>) -> String {
 }
 
 #[tauri::command]
+fn get_sticky_note_by_id(id: String, state: State<AppState>) -> Result<String, String> {
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .query_row(
+            "SELECT content FROM sticky_notes WHERE id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_sticky_note_by_id(
+    id: String,
+    content: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let now = Utc::now().to_rfc3339();
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "UPDATE sticky_notes SET content=?1, updated_at=?2 WHERE id=?3",
+            params![content, now, id],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn save_sticky_note(content: String, state: State<AppState>) -> Result<(), String> {
     state
         .db
@@ -329,8 +370,10 @@ fn set_sticky_mode(mode: String, app: AppHandle, state: State<AppState>) -> Resu
             [normalized],
         )
         .map_err(|error| error.to_string())?;
-    if app.get_webview_window("sticky").is_some() {
-        let _ = apply_sticky_edge_state(&app, "nearest", normalized == "edge");
+    for (label, _) in app.webview_windows() {
+        if label.starts_with("sticky-") {
+            let _ = apply_sticky_edge_state(&app, &label, "nearest", normalized == "edge");
+        }
     }
     let _ = app.emit("sticky-mode-changed", json!({ "mode": normalized }));
     Ok(())
@@ -451,6 +494,32 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
     })
 }
 
+fn normalize_notion_page_id(input: &str) -> Result<String, String> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut candidate = String::new();
+    for character in input.chars().chain(std::iter::once('\0')) {
+        if character.is_ascii_hexdigit() || character == '-' {
+            candidate.push(character);
+            continue;
+        }
+
+        let compact = candidate
+            .chars()
+            .filter(|value| value.is_ascii_hexdigit())
+            .collect::<String>();
+        if compact.len() >= 32 {
+            return Ok(compact[compact.len() - 32..].to_ascii_lowercase());
+        }
+        candidate.clear();
+    }
+
+    Err("无法从输入内容中识别 Notion 页面 ID，请粘贴完整页面链接".to_string())
+}
+
 #[tauri::command]
 fn save_settings(
     app: AppHandle,
@@ -461,6 +530,7 @@ fn save_settings(
     window_opacity: String,
     state: State<AppState>,
 ) -> Result<(), String> {
+    let page_id = normalize_notion_page_id(&page_id)?;
     let opacity = window_opacity
         .parse::<f32>()
         .unwrap_or(1.0)
@@ -799,12 +869,15 @@ async fn sync_loop(app: AppHandle) {
         if !token.is_empty() && !page.is_empty() {
             if let Some(record) = pending.first() {
                 let (result, is_delete) = if record.action == "delete" {
-                    (delete_from_notion(
-                        &token,
-                        record.notion_block_ids.as_deref().unwrap_or_default(),
+                    (
+                        delete_from_notion(
+                            &token,
+                            record.notion_block_ids.as_deref().unwrap_or_default(),
+                        )
+                        .await
+                        .map(|_| Vec::new()),
+                        true,
                     )
-                    .await
-                    .map(|_| Vec::new()), true)
                 } else {
                     (append_to_notion(&token, &page, record).await, false)
                 };
@@ -857,28 +930,38 @@ async fn sync_loop(app: AppHandle) {
 }
 
 #[tauri::command]
-fn set_expanded(app: AppHandle, expanded: bool) -> Result<(), String> {
+fn set_expanded(app: AppHandle, expanded: bool, actions_expanded: bool) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
     window
         .set_size(tauri::LogicalSize::new(
-            360.0,
+            if actions_expanded { 470.0 } else { 320.0 },
             if expanded { 305.0 } else { 44.0 },
         ))
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn set_details_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
+fn set_details_mode(
+    app: AppHandle,
+    enabled: bool,
+    actions_expanded: Option<bool>,
+) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
     window
         .set_size(tauri::LogicalSize::new(
-            if enabled { 880.0 } else { 360.0 },
+            if enabled {
+                880.0
+            } else if actions_expanded.unwrap_or(false) {
+                470.0
+            } else {
+                320.0
+            },
             if enabled { 680.0 } else { 44.0 },
         ))
         .map_err(|error| error.to_string())
@@ -901,6 +984,24 @@ async fn open_details(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_sticky_note(app: AppHandle) -> Result<(), String> {
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Some(state) = app.try_state::<AppState>() {
+        let db = state.db.lock().map_err(|error| error.to_string())?;
+        let note_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM sticky_notes", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        let initial_content = if note_count == 0 {
+            get_setting(&db, "sticky_note")
+        } else {
+            String::new()
+        };
+        db.execute(
+            "INSERT INTO sticky_notes(id,content,created_at,updated_at) VALUES(?1,?2,?3,?3)",
+            params![id, initial_content, now],
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let sticky_mode = app
         .try_state::<AppState>()
         .and_then(|state| {
@@ -912,17 +1013,13 @@ async fn open_sticky_note(app: AppHandle) -> Result<(), String> {
         })
         .filter(|mode| mode == "edge")
         .unwrap_or_else(|| "free".to_string());
-    if let Some(window) = app.get_webview_window("sticky") {
-        window.destroy().ok();
-    }
-    let sticky_url = if sticky_mode == "edge" {
-        "sticky.html?mode=edge".to_string()
-    } else {
-        "sticky.html".to_string()
-    };
-    let window = WebviewWindowBuilder::new(&app, "sticky", WebviewUrl::App(sticky_url.into()))
+    let sticky_url = format!("sticky.html?id={id}&mode={sticky_mode}");
+    let window_label = format!("sticky-{id}");
+    let initial_monitor = app.primary_monitor().ok().flatten();
+    let sticky_size = sticky_logical_size(initial_monitor.as_ref());
+    let window = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(sticky_url.into()))
         .title("便签")
-        .inner_size(377.0, 377.0)
+        .inner_size(sticky_size, sticky_size)
         .resizable(true)
         .decorations(false)
         .always_on_top(true)
@@ -942,38 +1039,146 @@ async fn open_sticky_note(app: AppHandle) -> Result<(), String> {
     }
     window.set_focus().ok();
     if sticky_mode == "edge" {
-        let _ = apply_sticky_edge_state(&app, "nearest", true);
+        let _ = apply_sticky_edge_state(&app, &window_label, "nearest", true);
     }
     Ok(())
 }
 
 #[tauri::command]
-fn set_sticky_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
-    let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
+fn set_sticky_pinned(app: AppHandle, window_label: String, pinned: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window(&window_label)
+        .ok_or("便签窗口不存在")?;
     window
         .set_always_on_top(pinned)
         .map_err(|error| error.to_string())
 }
 
-fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Result<String, String> {
-    const NORMAL_WIDTH: u32 = 377;
-    const NORMAL_HEIGHT: u32 = 377;
+#[tauri::command]
+fn snap_sticky_to_nearby(app: AppHandle, window_label: String) -> Result<bool, String> {
+    const SNAP_DISTANCE: i32 = 28;
+
+    let window = app
+        .get_webview_window(&window_label)
+        .ok_or("便签窗口不存在")?;
+    let position = window.outer_position().map_err(|error| error.to_string())?;
+    let size = window.outer_size().map_err(|error| error.to_string())?;
+    let left = position.x;
+    let top = position.y;
+    let right = left + size.width as i32;
+    let bottom = top + size.height as i32;
+    let mut best: Option<(i32, i32, i32)> = None;
+
+    for (label, other) in app.webview_windows() {
+        if label == window_label
+            || !label.starts_with("sticky-")
+            || !other.is_visible().unwrap_or(false)
+        {
+            continue;
+        }
+        let other_position = match other.outer_position() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let other_size = match other.outer_size() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let other_left = other_position.x;
+        let other_top = other_position.y;
+        let other_right = other_left + other_size.width as i32;
+        let other_bottom = other_top + other_size.height as i32;
+        let vertical_overlap = bottom.min(other_bottom) - top.max(other_top);
+        let horizontal_overlap = right.min(other_right) - left.max(other_left);
+
+        let candidates = [
+            (
+                (left - other_right).abs(),
+                other_right,
+                top,
+                vertical_overlap > 24,
+            ),
+            (
+                (right - other_left).abs(),
+                other_left - size.width as i32,
+                top,
+                vertical_overlap > 24,
+            ),
+            (
+                (top - other_bottom).abs(),
+                left,
+                other_bottom,
+                horizontal_overlap > 24,
+            ),
+            (
+                (bottom - other_top).abs(),
+                left,
+                other_top - size.height as i32,
+                horizontal_overlap > 24,
+            ),
+        ];
+        for (distance, x, y, overlaps) in candidates {
+            if overlaps
+                && distance <= SNAP_DISTANCE
+                && best.is_none_or(|current| distance < current.0)
+            {
+                best = Some((distance, x, y));
+            }
+        }
+    }
+
+    if let Some((_, x, y)) = best {
+        window
+            .set_position(PhysicalPosition::new(x, y))
+            .map_err(|error| error.to_string())?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn sticky_logical_size(monitor: Option<&Monitor>) -> f64 {
+    const DEFAULT_SIZE: f64 = 377.0;
+    const MIN_SIZE: f64 = 300.0;
+    const MAX_SIZE: f64 = 440.0;
+
+    let Some(monitor) = monitor else {
+        return DEFAULT_SIZE;
+    };
+    let scale = monitor.scale_factor();
+    let size = monitor.size();
+    let logical_width = size.width as f64 / scale;
+    let logical_height = size.height as f64 / scale;
+    (logical_width * 0.22)
+        .min(logical_height * 0.35)
+        .clamp(MIN_SIZE, MAX_SIZE)
+        .round()
+}
+
+fn apply_sticky_edge_state(
+    app: &AppHandle,
+    window_label: &str,
+    edge: &str,
+    collapsed: bool,
+) -> Result<String, String> {
     const EDGE_VISIBLE: i32 = 12;
 
-    let window = app.get_webview_window("sticky").ok_or("便签窗口不存在")?;
+    let window = app
+        .get_webview_window(window_label)
+        .ok_or("便签窗口不存在")?;
     let monitor = window
         .current_monitor()
         .map_err(|error| error.to_string())?
         .or_else(|| app.primary_monitor().ok().flatten());
     let Some(monitor) = monitor else {
+        let normal_size = sticky_logical_size(None) as u32;
         window
             .set_size(PhysicalSize::new(
                 if collapsed {
                     EDGE_VISIBLE as u32
                 } else {
-                    NORMAL_WIDTH
+                    normal_size
                 },
-                NORMAL_HEIGHT,
+                normal_size,
             ))
             .map_err(|error| error.to_string())?;
         window
@@ -984,12 +1189,14 @@ fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Resu
 
     let monitor_position = monitor.position();
     let monitor_size = monitor.size();
+    let logical_size = sticky_logical_size(Some(&monitor));
+    let physical_size = (logical_size * monitor.scale_factor()).round() as u32;
     let left = monitor_position.x;
     let top = monitor_position.y;
     let right = left + monitor_size.width as i32;
     let bottom = top + monitor_size.height as i32;
-    let width = NORMAL_WIDTH as i32;
-    let height = NORMAL_HEIGHT as i32;
+    let width = physical_size as i32;
+    let height = physical_size as i32;
     let position = window
         .outer_position()
         .unwrap_or_else(|_| PhysicalPosition::new(left + 96, top + 96));
@@ -997,53 +1204,37 @@ fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Resu
     let center_y = position.y + height / 2;
 
     let normalized_edge = match edge {
-        "left" | "right" | "top" | "bottom" => edge,
+        "left" | "right" => edge,
         _ => {
-            let distances = [
-                ("left", (position.x - left).abs()),
-                ("right", (right - (position.x + width)).abs()),
-                ("top", (position.y - top).abs()),
-                ("bottom", (bottom - (position.y + height)).abs()),
-            ];
-            distances
-                .iter()
-                .min_by_key(|(_, distance)| *distance)
-                .map(|(edge_name, _)| *edge_name)
-                .unwrap_or("left")
+            let left_distance = (center_x - left).abs();
+            let right_distance = (right - center_x).abs();
+            if left_distance <= right_distance {
+                "left"
+            } else {
+                "right"
+            }
         }
     };
 
     let expanded_left = match normalized_edge {
         "left" => left,
-        "right" => right - width,
-        _ => center_x.clamp(left, right - width),
+        _ => right - width,
     };
-    let expanded_top = match normalized_edge {
-        "top" => top,
-        "bottom" => bottom - height,
-        _ => center_y.clamp(top, bottom - height),
-    };
+    let expanded_top = center_y.clamp(top, bottom - height);
 
     let (target_width, target_height, x, y) = if collapsed {
         match normalized_edge {
-            "left" => (EDGE_VISIBLE as u32, NORMAL_HEIGHT, left, expanded_top),
+            "left" => (EDGE_VISIBLE as u32, physical_size, left, expanded_top),
             "right" => (
                 EDGE_VISIBLE as u32,
-                NORMAL_HEIGHT,
+                physical_size,
                 right - EDGE_VISIBLE,
                 expanded_top,
             ),
-            "top" => (NORMAL_WIDTH, EDGE_VISIBLE as u32, expanded_left, top),
-            "bottom" => (
-                NORMAL_WIDTH,
-                EDGE_VISIBLE as u32,
-                expanded_left,
-                bottom - EDGE_VISIBLE,
-            ),
-            _ => (EDGE_VISIBLE as u32, NORMAL_HEIGHT, left, expanded_top),
+            _ => (EDGE_VISIBLE as u32, physical_size, left, expanded_top),
         }
     } else {
-        (NORMAL_WIDTH, NORMAL_HEIGHT, expanded_left, expanded_top)
+        (physical_size, physical_size, expanded_left, expanded_top)
     };
 
     window
@@ -1058,21 +1249,26 @@ fn apply_sticky_edge_state(app: &AppHandle, edge: &str, collapsed: bool) -> Resu
 }
 
 #[tauri::command]
-fn set_sticky_edge_state(app: AppHandle, edge: String, collapsed: bool) -> Result<String, String> {
-    apply_sticky_edge_state(&app, &edge, collapsed)
+fn set_sticky_edge_state(
+    app: AppHandle,
+    window_label: String,
+    edge: String,
+    collapsed: bool,
+) -> Result<String, String> {
+    apply_sticky_edge_state(&app, &window_label, &edge, collapsed)
 }
 
 #[tauri::command]
-fn close_sticky_note(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("sticky") {
+fn close_sticky_note(app: AppHandle, window_label: String) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(&window_label) {
         window.hide().map_err(|error| error.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
-fn minimize_sticky_note(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("sticky") {
+fn minimize_sticky_note(app: AppHandle, window_label: String) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(&window_label) {
         window.minimize().map_err(|error| error.to_string())?;
     }
     Ok(())
@@ -1088,54 +1284,8 @@ fn open_screen_clip() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn snap_main_window(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
-    let position = window.outer_position().map_err(|error| error.to_string())?;
-    let size = window.outer_size().map_err(|error| error.to_string())?;
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
-        .or_else(|| app.primary_monitor().ok().flatten())
-        .ok_or("没有可用显示器")?;
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-
-    let left = monitor_position.x;
-    let top = monitor_position.y;
-    let right = left + monitor_size.width as i32 - size.width as i32;
-    let bottom = top + monitor_size.height as i32 - size.height as i32;
-    let center_x = position.x + size.width as i32 / 2;
-    let center_y = position.y + size.height as i32 / 2;
-
-    let distances = [
-        ("left", (position.x - left).abs()),
-        ("right", (right - position.x).abs()),
-        ("top", (position.y - top).abs()),
-        ("bottom", (bottom - position.y).abs()),
-    ];
-    let nearest = distances
-        .iter()
-        .min_by_key(|(_, distance)| *distance)
-        .map(|(edge, _)| *edge)
-        .unwrap_or("left");
-
-    let margin = 8;
-    let (x, y) = match nearest {
-        "left" => (left + margin, center_y.clamp(top + margin, bottom - margin)),
-        "right" => (
-            right - margin,
-            center_y.clamp(top + margin, bottom - margin),
-        ),
-        "top" => (center_x.clamp(left + margin, right - margin), top + margin),
-        _ => (
-            center_x.clamp(left + margin, right - margin),
-            bottom - margin,
-        ),
-    };
-
-    window
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|error| error.to_string())
+fn quit_app(app: AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -1199,6 +1349,79 @@ async fn update_check_loop(app: AppHandle) {
     }
 }
 
+fn toggle_main_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if window.is_visible().unwrap_or(false) {
+        window.hide().ok();
+        return;
+    }
+
+    window.set_always_on_top(true).ok();
+    window.show().ok();
+    window.set_focus().ok();
+    let _ = window.emit("summon-floating-bar", ());
+}
+
+fn register_summon_shortcut(app: &AppHandle, shortcut: &str) -> Result<(), String> {
+    app.global_shortcut()
+        .on_shortcut(shortcut, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                toggle_main_window(app);
+            }
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_summon_shortcut(state: State<AppState>) -> String {
+    state
+        .db
+        .lock()
+        .map(|db| {
+            let shortcut = get_setting(&db, "summon_shortcut");
+            if shortcut.is_empty() {
+                DEFAULT_SUMMON_SHORTCUT.to_string()
+            } else {
+                shortcut
+            }
+        })
+        .unwrap_or_else(|_| DEFAULT_SUMMON_SHORTCUT.to_string())
+}
+
+#[tauri::command]
+fn set_summon_shortcut(
+    shortcut: String,
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let shortcut = shortcut.trim();
+    if shortcut.is_empty() {
+        return Err("快捷键不能为空".to_string());
+    }
+
+    let current = get_summon_shortcut(state.clone());
+    app.global_shortcut().unregister(current.as_str()).ok();
+    if let Err(error) = register_summon_shortcut(&app, shortcut) {
+        register_summon_shortcut(&app, &current).ok();
+        return Err(format!("快捷键不可用：{error}"));
+    }
+
+    state
+        .db
+        .lock()
+        .map_err(|error| error.to_string())?
+        .execute(
+            "INSERT INTO settings(key,value)
+             VALUES('summon_shortcut',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [shortcut],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -1207,6 +1430,7 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -1215,6 +1439,22 @@ fn main() {
                 db: Mutex::new(init_db(&dir.join("inbox.sqlite")).map_err(std::io::Error::other)?),
                 data_dir: dir,
             });
+            let shortcut = {
+                let state = app.state::<AppState>();
+                state
+                    .db
+                    .lock()
+                    .map(|db| {
+                        let value = get_setting(&db, "summon_shortcut");
+                        if value.is_empty() {
+                            DEFAULT_SUMMON_SHORTCUT.to_string()
+                        } else {
+                            value
+                        }
+                    })
+                    .unwrap_or_else(|_| DEFAULT_SUMMON_SHORTCUT.to_string())
+            };
+            register_summon_shortcut(app.handle(), &shortcut).ok();
             app.autolaunch().enable().ok();
             tauri::async_runtime::spawn(sync_loop(app.handle().clone()));
             tauri::async_runtime::spawn(update_check_loop(app.handle().clone()));
@@ -1228,6 +1468,8 @@ fn main() {
             retry_record,
             get_sticky_note,
             save_sticky_note,
+            get_sticky_note_by_id,
+            save_sticky_note_by_id,
             get_sticky_mode,
             set_sticky_mode,
             sticky_to_record,
@@ -1239,14 +1481,41 @@ fn main() {
             open_details,
             open_sticky_note,
             set_sticky_pinned,
+            snap_sticky_to_nearby,
             set_sticky_edge_state,
             close_sticky_note,
             minimize_sticky_note,
             open_screen_clip,
-            snap_main_window,
+            quit_app,
             check_for_update,
-            install_update
+            install_update,
+            get_summon_shortcut,
+            set_summon_shortcut
         ])
         .run(tauri::generate_context!())
         .expect("应用启动失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_notion_page_id;
+
+    const PAGE_ID: &str = "3816bf70b4ce8067bfaed0a7b631c7c2";
+
+    #[test]
+    fn accepts_plain_notion_page_id() {
+        assert_eq!(normalize_notion_page_id(PAGE_ID).unwrap(), PAGE_ID);
+    }
+
+    #[test]
+    fn extracts_id_from_notion_share_link() {
+        let link = format!("https://www.notion.so/Ideas-{PAGE_ID}?source=copy_link");
+        assert_eq!(normalize_notion_page_id(&link).unwrap(), PAGE_ID);
+    }
+
+    #[test]
+    fn accepts_hyphenated_page_id() {
+        let link = "https://www.notion.so/3816bf70-b4ce-8067-bfae-d0a7b631c7c2";
+        assert_eq!(normalize_notion_page_id(link).unwrap(), PAGE_ID);
+    }
 }

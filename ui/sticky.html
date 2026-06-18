@@ -10,8 +10,8 @@
     <div class="sticky-titlebar" id="stickyDrag">
       <button class="sticky-icon" id="stickyMenuButton" type="button" title="&#33756;&#21333;">&#9776;</button>
       <span class="sticky-spacer"></span>
-      <button class="sticky-icon sticky-to-record-btn" id="toRecord" type="button" title="&#20445;&#23384;&#20026;&#28789;&#24863;&#35760;&#24405; (Ctrl+S)">&#x1F4DD;</button>
-      <button class="sticky-icon active" id="pinSticky" type="button" title="&#32622;&#39030;">&#8982;</button>
+      <button class="sticky-icon" id="newSticky" type="button" title="&#26032;&#24314;&#20415;&#31614;" aria-label="&#26032;&#24314;&#20415;&#31614;">&#43;</button>
+      <button class="sticky-icon sticky-pin active" id="pinSticky" type="button" title="&#32622;&#39030;" aria-label="&#32622;&#39030;">&#128204;&#65038;</button>
       <button class="sticky-icon" id="minSticky" type="button" title="&#26368;&#23567;&#21270;">&#8722;</button>
       <button class="sticky-icon" id="closeSticky" type="button" title="&#20851;&#38381;">&#215;</button>
     </div>
@@ -54,12 +54,13 @@
     (function() {
       var w = window.__TAURI__.window.getCurrentWindow();
       var invoke = window.__TAURI__.core.invoke;
+      var windowLabel = w.label;
       var closeBtn = document.getElementById('closeSticky');
       var minBtn = document.getElementById('minSticky');
       if (closeBtn) {
         closeBtn.addEventListener('click', function() {
           // 先测最简单的 —— 调用 Rust 命令关闭窗口
-          invoke('close_sticky_note').catch(function(e) {
+          invoke('close_sticky_note', { windowLabel: windowLabel }).catch(function(e) {
             closeBtn.textContent = String(e).slice(0, 10);
           });
         });
@@ -67,7 +68,7 @@
       }
       if (minBtn) {
         minBtn.addEventListener('click', function() {
-          invoke('minimize_sticky_note').catch(function(e) {
+          invoke('minimize_sticky_note', { windowLabel: windowLabel }).catch(function(e) {
             minBtn.textContent = String(e).slice(0, 10);
           });
         });

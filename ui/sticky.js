@@ -1,6 +1,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
 const appWindow = window.__TAURI__.window.getCurrentWindow();
+const windowLabel = appWindow.label;
+const noteId = new URLSearchParams(window.location.search).get("id");
 
 const stickyNote = document.querySelector("#stickyNote");
 const stickyStatus = document.querySelector("#stickyStatus");
@@ -12,6 +14,8 @@ let stickyMode = "free";
 let stickyEdge = "nearest";
 let collapseTimer = null;
 let isDraggingSticky = false;
+let trackingDragMoves = false;
+let dragSettleTimer = null;
 const colorKey = "inspiration-box.sticky-color";
 const defaultColor = "purple";
 
@@ -81,10 +85,29 @@ function clearCollapseTimer() {
   collapseTimer = null;
 }
 
+function settleStickyDrag(delay = 300) {
+  clearTimeout(dragSettleTimer);
+  dragSettleTimer = setTimeout(async () => {
+    trackingDragMoves = false;
+    isDraggingSticky = false;
+    if (stickyMode === "edge") {
+      stickyEdge = "nearest";
+      scheduleCollapse();
+    } else {
+      try {
+        await invoke("snap_sticky_to_nearby", { windowLabel });
+      } catch (error) {
+        setStickyStatus(String(error), true);
+      }
+    }
+  }, delay);
+}
+
 async function expandFromEdge() {
   if (stickyMode !== "edge") return;
   clearCollapseTimer();
   stickyEdge = await invoke("set_sticky_edge_state", {
+    windowLabel,
     edge: stickyEdge,
     collapsed: false,
   });
@@ -97,6 +120,7 @@ function scheduleCollapse() {
   collapseTimer = setTimeout(async () => {
     try {
       stickyEdge = await invoke("set_sticky_edge_state", {
+        windowLabel,
         edge: stickyEdge,
         collapsed: true,
       });
@@ -119,6 +143,7 @@ async function applyStickyMode(mode, persist = false) {
 
   if (stickyMode === "edge") {
     stickyEdge = await invoke("set_sticky_edge_state", {
+      windowLabel,
       edge: "nearest",
       collapsed: true,
     });
@@ -127,6 +152,7 @@ async function applyStickyMode(mode, persist = false) {
     setTimeout(() => {
       if (stickyMode === "edge") {
         invoke("set_sticky_edge_state", {
+          windowLabel,
           edge: stickyEdge,
           collapsed: true,
         })
@@ -140,6 +166,7 @@ async function applyStickyMode(mode, persist = false) {
     setTimeout(() => {
       if (stickyMode === "edge") {
         invoke("set_sticky_edge_state", {
+          windowLabel,
           edge: stickyEdge,
           collapsed: true,
         })
@@ -155,6 +182,7 @@ async function applyStickyMode(mode, persist = false) {
   }
 
   await invoke("set_sticky_edge_state", {
+    windowLabel,
     edge: stickyEdge,
     collapsed: false,
   });
@@ -163,14 +191,15 @@ async function applyStickyMode(mode, persist = false) {
 }
 
 async function saveStickyNow() {
-  await invoke("save_sticky_note", {
+  await invoke("save_sticky_note_by_id", {
+    id: noteId,
     content: sanitizeStickyHtml(stickyNote.innerHTML),
   });
 }
 
 async function loadStickyNote() {
   try {
-    stickyNote.innerHTML = sanitizeStickyHtml(await invoke("get_sticky_note"));
+    stickyNote.innerHTML = sanitizeStickyHtml(await invoke("get_sticky_note_by_id", { id: noteId }));
     setStickyStatus("已保存到本地");
     stickyNote.focus();
   } catch (error) {
@@ -222,14 +251,17 @@ document.querySelector("#stickyDrag").addEventListener("mousedown", (event) => {
   }
   isDraggingSticky = true;
   expandFromEdge().then(() => {
+    trackingDragMoves = true;
     appWindow.startDragging().finally(() => {
-      isDraggingSticky = false;
-      if (stickyMode === "edge") {
-        stickyEdge = "nearest";
-        scheduleCollapse();
-      }
+      settleStickyDrag();
     });
   });
+});
+
+appWindow.onMoved(() => {
+  if (isDraggingSticky && trackingDragMoves) {
+    settleStickyDrag();
+  }
 });
 
 // ====== 标题栏按钮事件 ======
@@ -254,10 +286,12 @@ document.addEventListener("click", (event) => {
 
 document.querySelector("#pinSticky").onclick = async (event) => {
   pinned = !pinned;
-  await invoke("set_sticky_pinned", { pinned });
+  await invoke("set_sticky_pinned", { windowLabel, pinned });
   event.currentTarget.classList.toggle("active", pinned);
   setStickyStatus(pinned ? "已置顶" : "已取消置顶");
 };
+
+document.querySelector("#newSticky").onclick = () => invoke("open_sticky_note");
 
 // ====== 格式化工具栏按钮 ======
 document.querySelectorAll("[data-command]").forEach((button) => {
@@ -341,7 +375,8 @@ document.addEventListener("keydown", (e) => {
     document.execCommand("strikeThrough");
   } else if (key === "s" && !e.shiftKey) {
     e.preventDefault();
-    document.querySelector("#toRecord").click();
+    clearTimeout(saveTimer);
+    saveStickyNow().catch((error) => setStickyStatus(String(error), true));
     return;
   } else {
     return;
@@ -349,21 +384,6 @@ document.addEventListener("keydown", (e) => {
   updateFormatStates();
   queueSave();
 });
-
-// ====== 转为灵感记录 ======
-document.querySelector("#toRecord").onclick = async () => {
-  clearTimeout(saveTimer);
-  try {
-    if (!noteText()) {
-      throw new Error("便签为空，不能转为灵感");
-    }
-    await saveStickyNow();
-    await invoke("sticky_to_record");
-    setStickyStatus("已转为灵感，正在同步 Notion");
-  } catch (error) {
-    setStickyStatus(String(error), true);
-  }
-};
 
 // ====== 初始化：颜色 + 模式 + 加载内容 ======
 applyStickyColor(localStorage.getItem(colorKey) || defaultColor);
