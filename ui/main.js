@@ -17,17 +17,6 @@ let moreOpen = false;
 let quickStep = "content";
 let pendingQuickContent = "";
 
-/* ====== 拖动 vs 点击 区分 ======
-   按下记录起点，松开时如果位移 < 5px 且时长 < 500ms 视为点击 → 切换"更多"菜单。
-   位移达到阈值后放弃点击，Tauri 自身的 data-tauri-drag-region 负责拖动。 */
-const DRAG_CLICK_THRESHOLD = 5;
-const DRAG_CLICK_MAX_MS = 500;
-let pressStartX = 0;
-let pressStartY = 0;
-let pressStartT = 0;
-let pressMoved = false;
-let pendingToggle = null;
-
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.className = isError ? "status error" : "status";
@@ -180,51 +169,52 @@ quickInput.addEventListener("paste", () => {
   }, 0);
 });
 
-/* ====== 拖动 / 点击（拖动手柄即"更多"开关） ====== */
-function clearPendingToggle() {
-  if (pendingToggle) {
-    clearTimeout(pendingToggle);
-    pendingToggle = null;
-  }
-}
+/* ====== 拖动 / 点击（拖动手柄即"更多"开关） ======
+   不再使用 data-tauri-drag-region（Tauri v2 会拦截指针事件）。
+   改用 mousedown / mousemove / mouseup 手动判断：
+   - 位移 < 5px 视为点击 → 切换"更多"菜单
+   - 位移 >= 5px 视为拖动 → 调用 Rust drag_window 启动原生拖拽  */
+const DRAG_CLICK_THRESHOLD = 5;
+let dragMouseDown = false;
+let dragStartX = 0, dragStartY = 0;
+let dragMoved = false;
+let dragStarted = false;  // 是否已调用 drag_window
 
-dragHandle.addEventListener("pointerdown", (event) => {
+dragHandle.addEventListener("mousedown", (event) => {
   if (event.button !== 0) return;
-  pressStartX = event.clientX;
-  pressStartY = event.clientY;
-  pressStartT = performance.now();
-  pressMoved = false;
-  clearPendingToggle();
-  // 若用户按住超过 DRAG_CLICK_MAX_MS 但未移动，认为是长按，不弹菜单。
-  pendingToggle = setTimeout(() => {
-    pendingToggle = null;
-  }, DRAG_CLICK_MAX_MS);
+  dragMouseDown = true;
+  dragStartX = event.clientX;
+  dragStartY = event.clientY;
+  dragMoved = false;
+  dragStarted = false;
 });
 
-dragHandle.addEventListener("pointermove", (event) => {
-  if (pressStartT === 0) return;
-  const dx = event.clientX - pressStartX;
-  const dy = event.clientY - pressStartY;
+document.addEventListener("mousemove", (event) => {
+  if (!dragMouseDown) return;
+  const dx = event.clientX - dragStartX;
+  const dy = event.clientY - dragStartY;
   if (Math.abs(dx) > DRAG_CLICK_THRESHOLD || Math.abs(dy) > DRAG_CLICK_THRESHOLD) {
-    pressMoved = true;
-    clearPendingToggle();
+    dragMoved = true;
+    if (!dragStarted) {
+      dragStarted = true;
+      invoke("drag_window").catch(() => {});
+    }
   }
 });
 
-dragHandle.addEventListener("pointerup", (event) => {
+document.addEventListener("mouseup", (event) => {
   if (event.button !== 0) return;
-  const elapsed = performance.now() - pressStartT;
-  const wasClick = !pressMoved && elapsed < DRAG_CLICK_MAX_MS;
-  pressStartT = 0;
-  clearPendingToggle();
-  if (wasClick) toggleMore();
-  // 松开后保持弹起的菜单状态，不在鼠标释放时关闭
-});
-
-dragHandle.addEventListener("pointercancel", () => {
-  pressStartT = 0;
-  pressMoved = false;
-  clearPendingToggle();
+  if (!dragMouseDown) return;
+  dragMouseDown = false;
+  if (!dragMoved) {
+    // 纯点击 → 关闭其他弹出菜单后切换"更多"
+    if (moreOpen) {
+      setMoreOpen(false);
+    } else {
+      toggleMore();
+    }
+    // 不 setMoreOpen(false) 后再 toggleMore() —— 已在 toggleMore 里处理
+  }
 });
 
 dragHandle.addEventListener("keydown", (event) => {
@@ -233,6 +223,7 @@ dragHandle.addEventListener("keydown", (event) => {
     toggleMore();
   } else if (event.key === "Escape" && moreOpen) {
     setMoreOpen(false);
+    dragHandle.focus();
   }
 });
 
@@ -297,7 +288,7 @@ moreMenu.addEventListener("keydown", (event) => {
 });
 
 /* 点击菜单外区域关闭 */
-document.addEventListener("pointerdown", (event) => {
+document.addEventListener("mousedown", (event) => {
   if (!moreOpen) return;
   if (event.target === dragHandle || dragHandle.contains(event.target)) return;
   if (moreMenu.contains(event.target)) return;

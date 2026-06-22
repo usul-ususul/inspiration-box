@@ -1309,6 +1309,12 @@ fn open_screen_clip() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn drag_window(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    window.start_dragging().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -1511,6 +1517,7 @@ fn main() {
             close_sticky_note,
             minimize_sticky_note,
             open_screen_clip,
+            drag_window,
             quit_app,
             check_for_update,
             install_update,

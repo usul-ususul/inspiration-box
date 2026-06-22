@@ -59,8 +59,8 @@ body:not(.page):not(.sticky-body) {
   height: 44px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 6px 8px 6px 6px;
   user-select: none;
 }
 
@@ -207,10 +207,9 @@ body:not(.page):not(.sticky-body) {
 }
 
 .quick-input {
-  flex: 0 1 220px;
-  width: 220px;
+  flex: 1;
   min-width: 0;
-  margin-left: auto;
+  margin-left: 0;
   height: 30px;
   border: 1px solid #cedadd;
   border-radius: 9px;
