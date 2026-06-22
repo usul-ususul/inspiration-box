@@ -37,11 +37,21 @@ function hexToRgba(hex, opacity) {
 
 function applyAppearance(settings) {
   const rawAlpha = Number(settings.windowOpacity || 1);
-  shell.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
-  panel.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
-  // 边框严格跟随用户设置
-  document.documentElement.style.setProperty("--shell-border",
-    rawAlpha < 0.05 ? "transparent" : hexToRgba(settings.windowColor, rawAlpha));
+  const glass = Boolean(settings.glassMode);
+
+  if (glass) {
+    // 玻璃模式：完全覆盖默认样式,不设 background-color
+    shell.style.backgroundColor = "";
+    panel.style.backgroundColor = "";
+    document.documentElement.style.setProperty("--shell-border", "rgba(255,255,255,0.25)");
+  } else {
+    shell.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
+    panel.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
+    document.documentElement.style.setProperty("--shell-border",
+      rawAlpha < 0.05 ? "transparent" : hexToRgba(settings.windowColor, rawAlpha));
+  }
+
+  document.documentElement.dataset.glass = glass ? "true" : "false";
   document.documentElement.dataset.shadowless = "true";
   document.documentElement.dataset.moreTransparent = settings.moreTransparent ? "true" : "false";
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";

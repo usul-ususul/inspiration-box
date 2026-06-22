@@ -471,7 +471,7 @@ fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save, text_stroke) = state
+    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save, text_stroke, glass_mode) = state
         .db
         .lock()
         .map(|db| {
@@ -483,6 +483,7 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
                 get_setting(&db, "input_transparent"),
                 get_setting(&db, "enter_direct_save"),
                 get_setting(&db, "text_stroke"),
+                get_setting(&db, "glass_mode"),
             )
         })
         .unwrap_or_default();
@@ -498,7 +499,8 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "moreTransparent": more_transparent == "1",
         "inputTransparent": input_transparent == "1",
         "enterDirectSave": enter_direct_save == "1",
-        "textStroke": text_stroke == "1"
+        "textStroke": text_stroke == "1",
+        "glassMode": glass_mode == "1"
     })
 }
 
@@ -540,6 +542,7 @@ fn save_settings(
     input_transparent: bool,
     enter_direct_save: bool,
     text_stroke: bool,
+    glass_mode: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
     let page_id = normalize_notion_page_id(&page_id)?;
@@ -604,6 +607,13 @@ fn save_settings(
         [if text_stroke { "1" } else { "0" }],
     )
     .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('glass_mode',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if glass_mode { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
     drop(db);
 
     if !token.trim().is_empty() {
@@ -628,7 +638,8 @@ fn save_settings(
             "moreTransparent": more_transparent,
             "inputTransparent": input_transparent,
             "enterDirectSave": enter_direct_save,
-            "textStroke": text_stroke
+            "textStroke": text_stroke,
+            "glassMode": glass_mode
         }),
     );
     Ok(())

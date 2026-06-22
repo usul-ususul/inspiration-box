@@ -279,6 +279,7 @@ async function loadSettings() {
   document.querySelector("#moreTransparent").checked = Boolean(data.moreTransparent);
   document.querySelector("#inputTransparent").checked = Boolean(data.inputTransparent);
   document.querySelector("#textStroke").checked = Boolean(data.textStroke);
+  document.querySelector("#glassMode").checked = Boolean(data.glassMode);
   document.querySelector("#enterDirectSave").checked = Boolean(data.enterDirectSave);
   summonShortcutInput.value = await invoke("get_summon_shortcut");
 }
@@ -403,6 +404,7 @@ document.querySelector("#saveSettings").onclick = async () => {
       inputTransparent: document.querySelector("#inputTransparent").checked,
       enterDirectSave: document.querySelector("#enterDirectSave").checked,
       textStroke: document.querySelector("#textStroke").checked,
+      glassMode: document.querySelector("#glassMode").checked,
     });
     document.querySelector("#settingsStatus").textContent = "已保存";
   });
