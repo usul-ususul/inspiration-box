@@ -11,24 +11,6 @@
       <button class="quick-drag-handle" id="dragHandle" type="button"
         title="点击打开更多，按住拖动浮条"
         aria-expanded="false">&#8942;&#8942;</button>
-      <div class="more-menu" id="moreMenu" role="menu" hidden>
-        <button class="more-item" data-action="details" role="menuitem" type="button">
-          <span class="more-item-icon" aria-hidden="true">&#9881;</span>
-          <span class="more-item-label">设置</span>
-        </button>
-        <button class="more-item" data-action="sticky" role="menuitem" type="button">
-          <span class="more-item-icon" aria-hidden="true">&#9635;</span>
-          <span class="more-item-label">便签</span>
-        </button>
-        <button class="more-item" data-action="expand" role="menuitem" type="button">
-          <span class="more-item-icon" aria-hidden="true">&#10133;</span>
-          <span class="more-item-label" data-expand-label>长文本</span>
-        </button>
-        <button class="more-item power-item" data-action="quit" role="menuitem" type="button">
-          <span class="more-item-icon" aria-hidden="true">&#9211;</span>
-          <span class="more-item-label">退出</span>
-        </button>
-      </div>
       <input id="quickInput" class="quick-input" placeholder="记录一下..." title="直接输入或粘贴，回车保存">
     </div>
     <section class="panel" id="panel" hidden>
@@ -42,6 +24,24 @@
       </div>
       <p class="status" id="status">支持粘贴或拖入图片，保存后自动同步 Notion。</p>
     </section>
+  </div>
+  <div class="more-menu" id="moreMenu" role="menu" hidden>
+    <button class="more-item" data-action="details" role="menuitem" type="button">
+      <span class="more-item-icon" aria-hidden="true">&#9881;</span>
+      <span class="more-item-label">设置</span>
+    </button>
+    <button class="more-item" data-action="sticky" role="menuitem" type="button">
+      <span class="more-item-icon" aria-hidden="true">&#9635;</span>
+      <span class="more-item-label">便签</span>
+    </button>
+    <button class="more-item" data-action="expand" role="menuitem" type="button">
+      <span class="more-item-icon" aria-hidden="true">&#10133;</span>
+      <span class="more-item-label" data-expand-label>长文本</span>
+    </button>
+    <button class="more-item power-item" data-action="quit" role="menuitem" type="button">
+      <span class="more-item-icon" aria-hidden="true">&#9211;</span>
+      <span class="more-item-label">退出</span>
+    </button>
   </div>
   <script src="main.js"></script>
 </body>
