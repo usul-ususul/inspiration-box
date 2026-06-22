@@ -394,3 +394,14 @@ const initialMode = new URLSearchParams(window.location.search).get("mode");
   .then((mode) => applyStickyMode(mode, false))
   .catch((error) => setStickyStatus(String(error), true));
 loadStickyNote();
+
+// ====== 应用"更多"和"输入框"透明设置（与浮条共享同一份配置） ======
+invoke("get_settings")
+  .then((settings) => {
+    document.documentElement.dataset.shadowless = "true";
+    document.documentElement.dataset.moreTransparent = settings?.moreTransparent ? "true" : "false";
+    document.documentElement.dataset.inputTransparent = settings?.inputTransparent ? "true" : "false";
+  })
+  .catch(() => {
+    document.documentElement.dataset.shadowless = "true";
+  });

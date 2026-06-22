@@ -471,7 +471,7 @@ fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let (page_id, window_color, window_opacity) = state
+    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save, text_stroke, glass_mode) = state
         .db
         .lock()
         .map(|db| {
@@ -479,6 +479,11 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
                 get_setting(&db, "notion_page_id"),
                 get_setting(&db, "window_color"),
                 get_setting(&db, "window_opacity"),
+                get_setting(&db, "more_transparent"),
+                get_setting(&db, "input_transparent"),
+                get_setting(&db, "enter_direct_save"),
+                get_setting(&db, "text_stroke"),
+                get_setting(&db, "glass_mode"),
             )
         })
         .unwrap_or_default();
@@ -490,7 +495,12 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "hasToken": has_token,
         "autostart": app.autolaunch().is_enabled().unwrap_or(false),
         "windowColor": if window_color.is_empty() { "#f8fafb" } else { &window_color },
-        "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity }
+        "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity },
+        "moreTransparent": more_transparent == "1",
+        "inputTransparent": input_transparent == "1",
+        "enterDirectSave": enter_direct_save == "1",
+        "textStroke": text_stroke == "1",
+        "glassMode": glass_mode == "1"
     })
 }
 
@@ -528,13 +538,18 @@ fn save_settings(
     autostart: bool,
     window_color: String,
     window_opacity: String,
+    more_transparent: bool,
+    input_transparent: bool,
+    enter_direct_save: bool,
+    text_stroke: bool,
+    glass_mode: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
     let page_id = normalize_notion_page_id(&page_id)?;
     let opacity = window_opacity
         .parse::<f32>()
         .unwrap_or(1.0)
-        .clamp(0.35, 1.0)
+        .clamp(0.0, 1.0)
         .to_string();
     let color = if window_color.trim().is_empty() {
         "#f8fafb".to_string()
@@ -552,16 +567,51 @@ fn save_settings(
     .map_err(|error| error.to_string())?;
     db.execute(
         "INSERT INTO settings(key,value)
-         VALUES('window_color',?1)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+             VALUES('window_color',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [&color],
     )
     .map_err(|error| error.to_string())?;
     db.execute(
         "INSERT INTO settings(key,value)
-         VALUES('window_opacity',?1)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+             VALUES('window_opacity',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [&opacity],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('more_transparent',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if more_transparent { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('input_transparent',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if input_transparent { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('enter_direct_save',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if enter_direct_save { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('text_stroke',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if text_stroke { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('glass_mode',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if glass_mode { "1" } else { "0" }],
     )
     .map_err(|error| error.to_string())?;
     drop(db);
@@ -584,7 +634,12 @@ fn save_settings(
         "appearance-changed",
         json!({
             "windowColor": color,
-            "windowOpacity": opacity
+            "windowOpacity": opacity,
+            "moreTransparent": more_transparent,
+            "inputTransparent": input_transparent,
+            "enterDirectSave": enter_direct_save,
+            "textStroke": text_stroke,
+            "glassMode": glass_mode
         }),
     );
     Ok(())
@@ -930,16 +985,26 @@ async fn sync_loop(app: AppHandle) {
 }
 
 #[tauri::command]
-fn set_expanded(app: AppHandle, expanded: bool, actions_expanded: bool) -> Result<(), String> {
+fn set_expanded(
+    app: AppHandle,
+    expanded: bool,
+    actions_expanded: Option<bool>,
+    more_open: Option<bool>,
+) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
+    let _ = actions_expanded;
+    let height = if expanded {
+        305.0
+    } else if more_open.unwrap_or(false) {
+        210.0
+    } else {
+        44.0
+    };
     window
-        .set_size(tauri::LogicalSize::new(
-            if actions_expanded { 470.0 } else { 320.0 },
-            if expanded { 305.0 } else { 44.0 },
-        ))
+        .set_size(tauri::LogicalSize::new(320.0, height))
         .map_err(|error| error.to_string())
 }
 
@@ -1284,6 +1349,12 @@ fn open_screen_clip() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn drag_window(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    window.start_dragging().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -1486,6 +1557,7 @@ fn main() {
             close_sticky_note,
             minimize_sticky_note,
             open_screen_clip,
+            drag_window,
             quit_app,
             check_for_update,
             install_update,

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-shadowless="true">
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="styles.css">
@@ -38,7 +38,25 @@
       <label>浮窗颜色</label>
       <input id="windowColor" type="color" value="#f8fafb">
       <label>浮窗透明度 <span id="opacityValue">100%</span></label>
-      <input id="windowOpacity" type="range" min="0.35" max="1" step="0.05" value="1">
+      <input id="windowOpacity" type="range" min="0" max="1" step="0.05" value="1">
+      <label class="checkbox">
+        <input id="shadowless" type="checkbox"> 去掉窗口阴影（浮条、便签、菜单）
+      </label>
+      <label class="checkbox">
+        <input id="moreTransparent" type="checkbox"> “更多”面板 / 便签菜单 改为透明
+      </label>
+      <label class="checkbox">
+        <input id="inputTransparent" type="checkbox"> 输入框（浮条、长文本、便签）改为透明
+      </label>
+      <label class="checkbox">
+        <input id="textStroke" type="checkbox"> 文字白色描边（全透明时保持可读）
+      </label>
+      <label class="checkbox">
+        <input id="glassMode" type="checkbox"> 液态玻璃效果（毛玻璃，窗口背景虚化）
+      </label>
+      <label class="checkbox">
+        <input id="enterDirectSave" type="checkbox"> 点击回车直接保存（跳过选择类别）
+      </label>
       <button class="primary" id="saveSettings" type="button">保存设置</button>
       <span class="status" id="settingsStatus"></span>
       <div class="update-row">
