@@ -275,6 +275,9 @@ async function loadSettings() {
   document.querySelector("#windowOpacity").value = data.windowOpacity || "1";
   document.querySelector("#opacityValue").textContent =
     `${Math.round(Number(document.querySelector("#windowOpacity").value) * 100)}%`;
+  document.querySelector("#shadowless").checked = true; // 阴影始终关闭（新行为）
+  document.querySelector("#moreTransparent").checked = Boolean(data.moreTransparent);
+  document.querySelector("#inputTransparent").checked = Boolean(data.inputTransparent);
   summonShortcutInput.value = await invoke("get_summon_shortcut");
 }
 
@@ -394,6 +397,8 @@ document.querySelector("#saveSettings").onclick = async () => {
       autostart: document.querySelector("#autostart").checked,
       windowColor: document.querySelector("#windowColor").value,
       windowOpacity: document.querySelector("#windowOpacity").value,
+      moreTransparent: document.querySelector("#moreTransparent").checked,
+      inputTransparent: document.querySelector("#inputTransparent").checked,
     });
     document.querySelector("#settingsStatus").textContent = "已保存";
   });

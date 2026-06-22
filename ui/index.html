@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-shadowless="true">
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="styles.css">
@@ -8,13 +8,26 @@
 <body>
   <div class="shell">
     <div class="bar">
-      <span class="quick-drag-region" id="dragHandle" title="拖动浮条" aria-label="拖动浮条" data-tauri-drag-region>&#8942;&#8942;</span>
-      <button class="icon more-button" id="more" type="button" title="更多操作" aria-expanded="false">•••</button>
-      <div class="quick-actions" id="quickActions" hidden>
-        <button class="icon" id="details" type="button" title="设置">⚙</button>
-        <button class="icon" id="sticky" type="button" title="便签">▣</button>
-        <button class="icon" id="expand" type="button" title="长文本">＋</button>
-        <button class="icon power-button" id="quitApp" type="button" title="退出 ahhhh mmt">&#9211;</button>
+      <button class="quick-drag-handle" id="dragHandle" type="button"
+        title="按住拖动浮条，点击或松开打开更多"
+        data-tauri-drag-region>&#8942;&#8942;</button>
+      <div class="more-menu" id="moreMenu" role="menu" hidden>
+        <button class="more-item" data-action="details" role="menuitem" type="button">
+          <span class="more-item-icon" aria-hidden="true">&#9881;</span>
+          <span class="more-item-label">设置</span>
+        </button>
+        <button class="more-item" data-action="sticky" role="menuitem" type="button">
+          <span class="more-item-icon" aria-hidden="true">&#9635;</span>
+          <span class="more-item-label">便签</span>
+        </button>
+        <button class="more-item" data-action="expand" role="menuitem" type="button">
+          <span class="more-item-icon" aria-hidden="true">&#10133;</span>
+          <span class="more-item-label" data-expand-label>长文本</span>
+        </button>
+        <button class="more-item power-item" data-action="quit" role="menuitem" type="button">
+          <span class="more-item-icon" aria-hidden="true">&#9211;</span>
+          <span class="more-item-label">退出</span>
+        </button>
       </div>
       <input id="quickInput" class="quick-input" placeholder="记录一下..." title="直接输入或粘贴，回车保存">
     </div>

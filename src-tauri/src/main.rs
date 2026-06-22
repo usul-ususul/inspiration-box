@@ -471,7 +471,7 @@ fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let (page_id, window_color, window_opacity) = state
+    let (page_id, window_color, window_opacity, more_transparent, input_transparent) = state
         .db
         .lock()
         .map(|db| {
@@ -479,6 +479,8 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
                 get_setting(&db, "notion_page_id"),
                 get_setting(&db, "window_color"),
                 get_setting(&db, "window_opacity"),
+                get_setting(&db, "more_transparent"),
+                get_setting(&db, "input_transparent"),
             )
         })
         .unwrap_or_default();
@@ -490,7 +492,9 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "hasToken": has_token,
         "autostart": app.autolaunch().is_enabled().unwrap_or(false),
         "windowColor": if window_color.is_empty() { "#f8fafb" } else { &window_color },
-        "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity }
+        "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity },
+        "moreTransparent": more_transparent == "1",
+        "inputTransparent": input_transparent == "1"
     })
 }
 
@@ -528,6 +532,8 @@ fn save_settings(
     autostart: bool,
     window_color: String,
     window_opacity: String,
+    more_transparent: bool,
+    input_transparent: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
     let page_id = normalize_notion_page_id(&page_id)?;
@@ -552,16 +558,30 @@ fn save_settings(
     .map_err(|error| error.to_string())?;
     db.execute(
         "INSERT INTO settings(key,value)
-         VALUES('window_color',?1)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+             VALUES('window_color',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [&color],
     )
     .map_err(|error| error.to_string())?;
     db.execute(
         "INSERT INTO settings(key,value)
-         VALUES('window_opacity',?1)
-         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+             VALUES('window_opacity',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [&opacity],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('more_transparent',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if more_transparent { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('input_transparent',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if input_transparent { "1" } else { "0" }],
     )
     .map_err(|error| error.to_string())?;
     drop(db);
@@ -584,7 +604,9 @@ fn save_settings(
         "appearance-changed",
         json!({
             "windowColor": color,
-            "windowOpacity": opacity
+            "windowOpacity": opacity,
+            "moreTransparent": more_transparent,
+            "inputTransparent": input_transparent
         }),
     );
     Ok(())
@@ -930,16 +952,19 @@ async fn sync_loop(app: AppHandle) {
 }
 
 #[tauri::command]
-fn set_expanded(app: AppHandle, expanded: bool, actions_expanded: bool) -> Result<(), String> {
+fn set_expanded(
+    app: AppHandle,
+    expanded: bool,
+    actions_expanded: Option<bool>,
+) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
+    // 旧浮条曾有"展开快速操作"状态；新版把动作合并到"更多"菜单，此处不再改变宽度。
+    let _ = actions_expanded;
     window
-        .set_size(tauri::LogicalSize::new(
-            if actions_expanded { 470.0 } else { 320.0 },
-            if expanded { 305.0 } else { 44.0 },
-        ))
+        .set_size(tauri::LogicalSize::new(320.0, if expanded { 305.0 } else { 44.0 }))
         .map_err(|error| error.to_string())
 }
 

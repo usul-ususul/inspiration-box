@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN" data-shadowless="true">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="ui/styles.css">
+  <title>ahhhh mmt — 预览 (2.2.0 shadowless / transparent)</title>
+  <style>
+    .preview-wrap {
+      padding: 24px;
+      max-width: 920px;
+      margin: 0 auto;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .preview-wrap h2 { margin: 12px 0 6px; }
+    .preview-controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 10px 0 16px;
+      align-items: center;
+    }
+    .preview-frame {
+      display: inline-block;
+      border: 1px dashed #b6c0c3;
+      border-radius: 18px;
+      padding: 6px;
+      margin-top: 8px;
+    }
+    .label { font-size: 13px; color: #4f6166; }
+    .preview-row { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+    .swatch-row { display: flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="preview-wrap">
+    <h1>ahhhh mmt — 2.2.0 预览</h1>
+    <p>下面三块分别模拟浮条（main）、便签（sticky）和"更多面板"展开后的状态，用于肉眼对比"去阴影 + 透明"效果。</p>
+
+    <div class="preview-controls">
+      <span class="label">切换：</span>
+      <label><input type="checkbox" id="toggleShadow" checked> 去掉窗口阴影</label>
+      <label><input type="checkbox" id="toggleMore"> "更多"面板 / 便签菜单 透明</label>
+      <label><input type="checkbox" id="toggleInput"> 输入框 透明</label>
+    </div>
+
+    <h2>① 浮条（main，44px 高度）</h2>
+    <div class="preview-frame">
+      <div class="shell">
+        <div class="bar">
+          <button class="quick-drag-handle active" type="button" title="拖动 / 点击打开更多">⋮⋮</button>
+          <div class="more-menu">
+            <button class="more-item" data-action="details" type="button">
+              <span class="more-item-icon">⚙</span><span class="more-item-label">设置</span>
+            </button>
+            <button class="more-item" data-action="sticky" type="button">
+              <span class="more-item-icon">▣</span><span class="more-item-label">便签</span>
+            </button>
+            <button class="more-item" data-action="expand" type="button">
+              <span class="more-item-icon">＋</span><span class="more-item-label">长文本</span>
+            </button>
+            <button class="more-item power-item" data-action="quit" type="button">
+              <span class="more-item-icon">⏻</span><span class="more-item-label">退出</span>
+            </button>
+          </div>
+          <input id="quickInput" class="quick-input" placeholder="记录一下...">
+        </div>
+      </div>
+    </div>
+
+    <h2>② "更多"面板（展开状态）</h2>
+    <div class="preview-frame">
+      <div class="shell" style="height: 305px;">
+        <div class="bar">
+          <button class="quick-drag-handle active" type="button">⋮⋮</button>
+          <div class="more-menu">
+            <button class="more-item" data-action="details" type="button">
+              <span class="more-item-icon">⚙</span><span class="more-item-label">设置</span>
+            </button>
+            <button class="more-item" data-action="sticky" type="button">
+              <span class="more-item-icon">▣</span><span class="more-item-label">便签</span>
+            </button>
+            <button class="more-item" data-action="expand" type="button">
+              <span class="more-item-icon">＋</span><span class="more-item-label">收起长文本</span>
+            </button>
+            <button class="more-item power-item" data-action="quit" type="button">
+              <span class="more-item-icon">⏻</span><span class="more-item-label">退出</span>
+            </button>
+          </div>
+          <input class="quick-input" value="午饭吃饺子">
+        </div>
+        <section class="panel">
+          <textarea placeholder="输入长文本..." rows="3"></textarea>
+          <div class="actions">
+            <button class="secondary">添加图片</button>
+            <span class="spacer"></span>
+            <button class="primary">保存</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <h2>③ 便签（sticky 紫色主题 + 菜单展开）</h2>
+    <div class="preview-row">
+      <div class="preview-frame">
+        <div class="sticky-shell" style="width: 360px; height: 360px;">
+          <div class="sticky-titlebar">
+            <button class="sticky-icon">☰</button>
+            <span class="sticky-spacer"></span>
+            <button class="sticky-icon">+</button>
+            <button class="sticky-icon sticky-pin active">📌︎</button>
+            <button class="sticky-icon">−</button>
+            <button class="sticky-icon">×</button>
+          </div>
+          <div class="sticky-menu">
+            <div class="sticky-menu-row">
+              <button class="sticky-swatch" data-color="purple"></button>
+              <button class="sticky-swatch" data-color="yellow"></button>
+              <button class="sticky-swatch" data-color="green"></button>
+              <button class="sticky-swatch" data-color="blue"></button>
+              <button class="sticky-swatch" data-color="pink"></button>
+              <button class="sticky-swatch" data-color="gray"></button>
+            </div>
+            <div class="sticky-menu-row sticky-mode-row">
+              <button class="sticky-mode-option active">自由拖动</button>
+              <button class="sticky-mode-option">吸边隐藏</button>
+            </div>
+          </div>
+          <div class="sticky-editor" contenteditable="true">这里放便签内容…</div>
+          <div class="sticky-toolbar">
+            <button class="sticky-tool"><b>B</b></button>
+            <button class="sticky-tool"><i>I</i></button>
+            <button class="sticky-tool"><u>U</u></button>
+            <button class="sticky-tool"><s>S</s></button>
+            <button class="sticky-shot">屏幕截图</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-frame">
+        <div class="sticky-shell" style="width: 360px; height: 360px;">
+          <div class="sticky-titlebar">
+            <button class="sticky-icon">☰</button>
+            <span class="sticky-spacer"></span>
+            <button class="sticky-icon">+</button>
+            <button class="sticky-icon sticky-pin active">📌︎</button>
+            <button class="sticky-icon">−</button>
+            <button class="sticky-icon">×</button>
+          </div>
+          <div class="sticky-editor" contenteditable="true">仅标题栏 + 内容：阴影已关。</div>
+          <div class="sticky-toolbar">
+            <button class="sticky-tool"><b>B</b></button>
+            <button class="sticky-tool"><i>I</i></button>
+            <button class="sticky-tool"><u>U</u></button>
+            <button class="sticky-tool"><s>S</s></button>
+            <button class="sticky-shot">屏幕截图</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function sync() {
+      const root = document.documentElement;
+      const shadow = document.getElementById("toggleShadow").checked;
+      const more = document.getElementById("toggleMore").checked;
+      const input = document.getElementById("toggleInput").checked;
+      root.dataset.shadowless = shadow ? "true" : "false";
+      root.dataset.moreTransparent = more ? "true" : "false";
+      root.dataset.inputTransparent = input ? "true" : "false";
+    }
+    document.querySelectorAll("input[type=checkbox]").forEach((el) => el.addEventListener("change", sync));
+    sync();
+  </script>
+</body>
+</html>

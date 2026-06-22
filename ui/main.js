@@ -8,14 +8,25 @@ const content = document.querySelector("#content");
 const statusEl = document.querySelector("#status");
 const preview = document.querySelector("#preview");
 const previewImage = document.querySelector("#previewImage");
-const quickActions = document.querySelector("#quickActions");
-const moreButton = document.querySelector("#more");
+const dragHandle = document.querySelector("#dragHandle");
+const moreMenu = document.querySelector("#moreMenu");
 
 let imageData = null;
 let expanded = false;
-let actionsExpanded = sessionStorage.getItem("quickActionsExpanded") === "1";
+let moreOpen = false;
 let quickStep = "content";
 let pendingQuickContent = "";
+
+/* ====== 拖动 vs 点击 区分 ======
+   按下记录起点，松开时如果位移 < 5px 且时长 < 500ms 视为点击 → 切换"更多"菜单。
+   位移达到阈值后放弃点击，Tauri 自身的 data-tauri-drag-region 负责拖动。 */
+const DRAG_CLICK_THRESHOLD = 5;
+const DRAG_CLICK_MAX_MS = 500;
+let pressStartX = 0;
+let pressStartY = 0;
+let pressStartT = 0;
+let pressMoved = false;
+let pendingToggle = null;
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -37,6 +48,9 @@ function hexToRgba(hex, opacity) {
 function applyAppearance(settings) {
   shell.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
   panel.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
+  document.documentElement.dataset.shadowless = "true";
+  document.documentElement.dataset.moreTransparent = settings.moreTransparent ? "true" : "false";
+  document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";
 }
 
 async function loadAppearance() {
@@ -51,22 +65,34 @@ async function toggle(value = !expanded) {
   expanded = value;
   if (expanded) {
     panel.hidden = false;
-    await invoke("set_expanded", { expanded: true, actionsExpanded });
+    await invoke("set_expanded", { expanded: true });
     content.focus();
     return;
   }
   panel.hidden = true;
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await invoke("set_expanded", { expanded: false, actionsExpanded });
+  await invoke("set_expanded", { expanded: false });
 }
 
-async function toggleActions(value = !actionsExpanded) {
-  actionsExpanded = value;
-  sessionStorage.setItem("quickActionsExpanded", actionsExpanded ? "1" : "0");
-  quickActions.hidden = !actionsExpanded;
-  moreButton.classList.toggle("active", actionsExpanded);
-  moreButton.setAttribute("aria-expanded", String(actionsExpanded));
-  await invoke("set_expanded", { expanded, actionsExpanded });
+function syncExpandMenuLabel() {
+  const label = moreMenu.querySelector("[data-action='expand'] .more-item-label");
+  if (!label) return;
+  label.textContent = expanded ? "收起长文本" : "长文本";
+}
+
+function setMoreOpen(value) {
+  moreOpen = value;
+  moreMenu.hidden = !value;
+  dragHandle.classList.toggle("active", value);
+  dragHandle.setAttribute("aria-expanded", String(value));
+  if (value) {
+    const firstItem = moreMenu.querySelector(".more-item");
+    if (firstItem) firstItem.focus();
+  }
+}
+
+function toggleMore(force) {
+  setMoreOpen(typeof force === "boolean" ? force : !moreOpen);
 }
 
 function resetQuickInput() {
@@ -128,34 +154,9 @@ function loadImage(file) {
   reader.readAsDataURL(file);
 }
 
-document.querySelector("#expand").onclick = () => {
-  if (!expanded && quickStep === "content" && quickInput.value.trim()) {
-    content.value = quickInput.value;
-  }
-  toggle();
-};
-
-moreButton.onclick = () => toggleActions();
-
-document.querySelector("#sticky").onclick = async () => {
-  try {
-    await invoke("open_sticky_note");
-    setStatus("Note opened.");
-  } catch (error) {
-    setStatus(`Note failed: ${error}`, true);
-  }
-};
-
-document.querySelector("#quitApp").onclick = () => invoke("quit_app");
-
-document.querySelector("#details").onclick = async () => {
-  await invoke("set_details_mode", { enabled: true, actionsExpanded });
-  window.location.href = "details.html";
-};
-
+document.querySelector("#save").onclick = saveCurrentRecord;
 document.querySelector("#image").onclick = () => document.querySelector("#file").click();
 document.querySelector("#file").onchange = (event) => loadImage(event.target.files[0]);
-document.querySelector("#save").onclick = saveCurrentRecord;
 
 quickInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && quickStep === "category") {
@@ -179,6 +180,130 @@ quickInput.addEventListener("paste", () => {
   }, 0);
 });
 
+/* ====== 拖动 / 点击（拖动手柄即"更多"开关） ====== */
+function clearPendingToggle() {
+  if (pendingToggle) {
+    clearTimeout(pendingToggle);
+    pendingToggle = null;
+  }
+}
+
+dragHandle.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  pressStartX = event.clientX;
+  pressStartY = event.clientY;
+  pressStartT = performance.now();
+  pressMoved = false;
+  clearPendingToggle();
+  // 若用户按住超过 DRAG_CLICK_MAX_MS 但未移动，认为是长按，不弹菜单。
+  pendingToggle = setTimeout(() => {
+    pendingToggle = null;
+  }, DRAG_CLICK_MAX_MS);
+});
+
+dragHandle.addEventListener("pointermove", (event) => {
+  if (pressStartT === 0) return;
+  const dx = event.clientX - pressStartX;
+  const dy = event.clientY - pressStartY;
+  if (Math.abs(dx) > DRAG_CLICK_THRESHOLD || Math.abs(dy) > DRAG_CLICK_THRESHOLD) {
+    pressMoved = true;
+    clearPendingToggle();
+  }
+});
+
+dragHandle.addEventListener("pointerup", (event) => {
+  if (event.button !== 0) return;
+  const elapsed = performance.now() - pressStartT;
+  const wasClick = !pressMoved && elapsed < DRAG_CLICK_MAX_MS;
+  pressStartT = 0;
+  clearPendingToggle();
+  if (wasClick) toggleMore();
+  // 松开后保持弹起的菜单状态，不在鼠标释放时关闭
+});
+
+dragHandle.addEventListener("pointercancel", () => {
+  pressStartT = 0;
+  pressMoved = false;
+  clearPendingToggle();
+});
+
+dragHandle.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    toggleMore();
+  } else if (event.key === "Escape" && moreOpen) {
+    setMoreOpen(false);
+  }
+});
+
+/* ====== "更多"菜单项动作 ====== */
+async function runMoreAction(action) {
+  setMoreOpen(false);
+  switch (action) {
+    case "details": {
+      try {
+        await invoke("set_details_mode", { enabled: true });
+        window.location.href = "details.html";
+      } catch (error) {
+        setStatus(String(error), true);
+      }
+      return;
+    }
+    case "sticky":
+      try {
+        await invoke("open_sticky_note");
+        setStatus("Note opened.");
+      } catch (error) {
+        setStatus(`Note failed: ${error}`, true);
+      }
+      return;
+    case "expand":
+      if (!expanded && quickStep === "content" && quickInput.value.trim()) {
+        content.value = quickInput.value;
+      }
+      await toggle();
+      syncExpandMenuLabel();
+      return;
+    case "quit":
+      try {
+        await invoke("quit_app");
+      } catch (error) {
+        setStatus(String(error), true);
+      }
+      return;
+  }
+}
+
+moreMenu.addEventListener("click", (event) => {
+  const item = event.target.closest(".more-item");
+  if (!item) return;
+  runMoreAction(item.dataset.action);
+});
+
+moreMenu.addEventListener("keydown", (event) => {
+  const items = [...moreMenu.querySelectorAll(".more-item")];
+  const idx = items.indexOf(document.activeElement);
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    items[(idx + 1 + items.length) % items.length].focus();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    items[(idx - 1 + items.length) % items.length].focus();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    setMoreOpen(false);
+    dragHandle.focus();
+  }
+});
+
+/* 点击菜单外区域关闭 */
+document.addEventListener("pointerdown", (event) => {
+  if (!moreOpen) return;
+  if (event.target === dragHandle || dragHandle.contains(event.target)) return;
+  if (moreMenu.contains(event.target)) return;
+  setMoreOpen(false);
+}, true);
+
 document.addEventListener("paste", (event) => {
   const file = [...event.clipboardData.files][0];
   if (file) loadImage(file);
@@ -192,6 +317,7 @@ document.addEventListener("drop", (event) => {
 listen("records-changed", async () => {
   if (expanded && !content.value.trim() && !imageData) {
     await toggle(false);
+    syncExpandMenuLabel();
   }
 });
 listen("appearance-changed", (event) => applyAppearance(event.payload || {}));
@@ -202,10 +328,9 @@ listen("summon-floating-bar", () => {
 
 resetQuickInput();
 loadAppearance();
-quickActions.hidden = !actionsExpanded;
-moreButton.classList.toggle("active", actionsExpanded);
-moreButton.setAttribute("aria-expanded", String(actionsExpanded));
-invoke("set_expanded", { expanded, actionsExpanded });
+moreMenu.hidden = true;
+syncExpandMenuLabel();
+invoke("set_expanded", { expanded });
 if (sessionStorage.getItem("focusQuickInput") === "1") {
   sessionStorage.removeItem("focusQuickInput");
   requestAnimationFrame(() => quickInput.focus());
