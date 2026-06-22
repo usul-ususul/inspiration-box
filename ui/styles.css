@@ -33,32 +33,30 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Apple Liquid Glass —— 真正的 backdrop-filter 玻璃
+   Apple Liquid Glass (WWDC25 visionOS-style)
    ─────────────────────────────────────────────
-   关键: 放弃 transparent 窗口,改用半透明白底 + 强 backdrop-filter。
-   Chromium/WebView2 在 transparent 窗口下 backdrop-filter 不工作,
-   但在普通窗口下能截取桌面对窗口后方的内容做模糊/饱和 —— 这就是
-   Apple 自己的实现方式。
-   ─────────────────────────────────────────────
-   层结构:
-   1. body 透传桌面(无背景)
-   2. .shell 半透明白底 + backdrop-filter:blur(30px) saturate(180%)
-      = 真实的"透过玻璃看桌面"效果
-   3. ::before 镜面光带扫过(7s)
-   4. ::after 边缘高亮 + 1px 玻璃边
+   关键特征(不是毛玻璃,不是光带动画):
+   1. 极淡底色 + 强 backdrop-filter → 真实的"透过厚玻璃看背后"
+   2. 边缘高光 + 棱镜色差(4 方向) → 玻璃厚度感的核心
+   3. 静止高光(只在边缘/拐角) → 不做移动光带
+   4. 强饱和 200% saturate → 后面色彩被增强
+   5. 强模糊 40px → 背后内容不可读,只剩颜色块
+   没有光带扫来扫去,没有颗粒,没有鼠标跟随
    ═══════════════════════════════════════════════════════════ */
 
 :root[data-glass="true"] .shell {
-    background: rgba(255, 255, 255, 0.18);
-    backdrop-filter: blur(30px) saturate(180%);
-    -webkit-backdrop-filter: blur(30px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border: 0.5px solid rgba(255, 255, 255, 0.40);
     box-shadow:
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.65),
+        /* 边缘内高光:顶/左强,底/右弱 */
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.55),
         inset 0 -1px 0 0 rgba(255, 255, 255, 0.10),
         inset 1px 0 0 0 rgba(255, 255, 255, 0.20),
         inset -1px 0 0 0 rgba(255, 255, 255, 0.10),
-        0 8px 32px rgba(0, 0, 0, 0.18),
+        /* 投影 */
+        0 12px 40px rgba(0, 0, 0, 0.20),
         0 2px 8px rgba(0, 0, 0, 0.10);
 }
 
@@ -68,37 +66,35 @@
     padding: 6px 10px;
 }
 
-/* 玻璃模式下文字可读性增强 */
+/* 玻璃文字 */
 :root[data-glass="true"] .quick-drag-handle {
     color: rgba(38, 50, 56, 0.85);
-    text-shadow: 0 0 2px rgba(255, 255, 255, 0.6);
 }
 :root[data-glass="true"] .quick-drag-handle:hover {
-    background: rgba(255, 255, 255, 0.30);
+    background: rgba(255, 255, 255, 0.25);
     color: #1a2024;
 }
 :root[data-glass="true"] .quick-drag-handle.active {
-    background: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.40);
     color: #1a2024;
 }
 :root[data-glass="true"] .quick-input {
     color: rgba(38, 50, 56, 0.95);
-    background: rgba(255, 255, 255, 0.15);
-    text-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.10);
 }
 :root[data-glass="true"] .quick-input::placeholder {
     color: rgba(38, 50, 56, 0.55);
 }
 
 :root[data-glass="true"] .panel {
-    background: rgba(255, 255, 255, 0.10);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.20);
     z-index: 3;
 }
 
-/* 镜面反射:斜向光带扫过 */
+/* 完全不动的静态边缘高光(只在 ::before 顶层绘制一次) */
 :root[data-glass="true"] .shell::before {
     content: "";
     position: absolute;
@@ -106,26 +102,17 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 1;
-    background: linear-gradient(115deg,
-        transparent 30%,
-        rgba(255, 255, 255, 0.05) 42%,
-        rgba(255, 255, 255, 0.18) 48%,
-        rgba(255, 255, 255, 0.28) 50%,
-        rgba(255, 255, 255, 0.18) 52%,
-        rgba(255, 255, 255, 0.05) 58%,
-        transparent 70%);
-    background-size: 300% 100%;
-    background-position: 100% 50%;
-    animation: glassSweep 6s ease-in-out infinite;
-    mix-blend-mode: overlay;
+    background:
+        /* 顶部静态高光线 */
+        linear-gradient(180deg,
+            rgba(255, 255, 255, 0.30) 0%,
+            transparent 8%,
+            transparent 92%,
+            rgba(255, 255, 255, 0.08) 100%);
+    /* 不做 animation,不做 background-size 移动 */
 }
 
-@keyframes glassSweep {
-    0%, 100% { background-position: 100% 50%; }
-    50%      { background-position: 0% 50%; }
-}
-
-/* 颗粒: SVG feTurbulence */
+/* 角落静态高光(右上、左下) - 静止 */
 :root[data-glass="true"] .shell::after {
     content: "";
     position: absolute;
@@ -133,9 +120,14 @@
     border-radius: inherit;
     pointer-events: none;
     z-index: 2;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
-    opacity: 0.06;
-    mix-blend-mode: overlay;
+    background:
+        radial-gradient(circle at 100% 0%,
+            rgba(255, 255, 255, 0.18) 0%,
+            transparent 25%),
+        radial-gradient(circle at 0% 100%,
+            rgba(255, 255, 255, 0.10) 0%,
+            transparent 25%);
+    /* 不动 */
 }
 
 * { box-sizing: border-box; }
