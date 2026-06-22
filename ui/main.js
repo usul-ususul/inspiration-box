@@ -36,15 +36,16 @@ function hexToRgba(hex, opacity) {
 }
 
 function applyAppearance(settings) {
-  shell.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
-  panel.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
-  // 边框颜色跟随透明度——全透明时边框也透明,不留下白边
-  const alpha = Number(settings.windowOpacity || 1);
+  const rawAlpha = Number(settings.windowOpacity || 1);
+  shell.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
+  panel.style.backgroundColor = hexToRgba(settings.windowColor, rawAlpha);
+  // 边框严格跟随用户设置
   document.documentElement.style.setProperty("--shell-border",
-    alpha < 0.05 ? "transparent" : hexToRgba(settings.windowColor, alpha));
+    rawAlpha < 0.05 ? "transparent" : hexToRgba(settings.windowColor, rawAlpha));
   document.documentElement.dataset.shadowless = "true";
   document.documentElement.dataset.moreTransparent = settings.moreTransparent ? "true" : "false";
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";
+  document.documentElement.dataset.textStroke = settings.textStroke ? "true" : "false";
   enterDirectSave = Boolean(settings.enterDirectSave);
 }
 

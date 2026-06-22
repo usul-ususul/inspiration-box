@@ -471,7 +471,7 @@ fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save) = state
+    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save, text_stroke) = state
         .db
         .lock()
         .map(|db| {
@@ -482,6 +482,7 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
                 get_setting(&db, "more_transparent"),
                 get_setting(&db, "input_transparent"),
                 get_setting(&db, "enter_direct_save"),
+                get_setting(&db, "text_stroke"),
             )
         })
         .unwrap_or_default();
@@ -496,7 +497,8 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity },
         "moreTransparent": more_transparent == "1",
         "inputTransparent": input_transparent == "1",
-        "enterDirectSave": enter_direct_save == "1"
+        "enterDirectSave": enter_direct_save == "1",
+        "textStroke": text_stroke == "1"
     })
 }
 
@@ -537,6 +539,7 @@ fn save_settings(
     more_transparent: bool,
     input_transparent: bool,
     enter_direct_save: bool,
+    text_stroke: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
     let page_id = normalize_notion_page_id(&page_id)?;
@@ -594,6 +597,13 @@ fn save_settings(
         [if enter_direct_save { "1" } else { "0" }],
     )
     .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('text_stroke',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if text_stroke { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
     drop(db);
 
     if !token.trim().is_empty() {
@@ -617,7 +627,8 @@ fn save_settings(
             "windowOpacity": opacity,
             "moreTransparent": more_transparent,
             "inputTransparent": input_transparent,
-            "enterDirectSave": enter_direct_save
+            "enterDirectSave": enter_direct_save,
+            "textStroke": text_stroke
         }),
     );
     Ok(())

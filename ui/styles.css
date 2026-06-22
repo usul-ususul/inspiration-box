@@ -24,6 +24,14 @@
   --textarea-bg: transparent;
 }
 
+/* 白色文字描边——全透明背景时确保深色文字可读 */
+:root[data-text-stroke="true"] {
+  text-shadow:
+    0 0 1px rgba(255,255,255,0.65),
+    0 0 1px rgba(255,255,255,0.65),
+    0 0 2px rgba(255,255,255,0.5);
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; background: transparent; }
 
@@ -50,7 +58,7 @@ body:not(.page):not(.sticky-body) {
   background: #f8fafb;
   border: 1px solid var(--shell-border, #dbe4e7);
   border-radius: 14px;
-  box-shadow: none;
+  box-shadow: var(--window-shadow, none);
   overflow: hidden;
 }
 
