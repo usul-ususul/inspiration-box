@@ -32,36 +32,61 @@
     0 0 2px rgba(255,255,255,0.5);
 }
 
-/* 液态玻璃（Apple Liquid Glass）效果
-   核心: backdrop-filter 由系统合成器提供桌面背景内容作模糊/折射
-   - blur 让桌面背景内容透过玻璃模糊可见 —— 真正的"与桌面交互"
-   - 环境光扫描动画模拟玻璃表面的光线流动
-   - 静止高光营造真实的玻璃反射质感 */
+/* ═══════════════════════════════════════════════════
+   Apple Liquid Glass 效果
+   参照 Apple WWDC25 Liquid Glass 设计语言:
+   1. backdrop-filter 取桌面背景做真实模糊/饱和 —— "与桌面交互"
+   2. 边缘透镜效应(lensing) —— 多层 inset shadow 模拟光线弯折
+   3. 镜面高光(specular) —— 双层斜向光带跟随几何形状
+   4. 磨砂颗粒(frosting) —— SVG feTurbulence 噪点纹理
+   5. 色差边缘(chromatic aberration) —— RGB 偏移棱镜效果
+   6. 3D 厚度感 —— 内外阴影组合营造物理深度
+   ═══════════════════════════════════════════════════ */
 :root[data-glass="true"] .shell {
-  background: rgba(248,250,251,0.08);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255,255,255,0.25);
+  /* 极淡底色 + 强模糊 + 高饱和 = 真实毛玻璃 */
+  background: rgba(248, 250, 251, 0.05);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+
+  /* 玻璃边缘:半透明白色 + 棱镜色差 */
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 14px;
+
+  /* 多层阴影 = 边缘透镜效应 + 3D 厚度 + 投影 */
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.10) inset,
-    var(--window-shadow, none);
-  /* 玻璃折射感:微弱色彩偏移 */
+    /* ── 边缘透镜(lensing): 内部光线弯折 ── */
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.6),        /* 顶边高光(光从上方来) */
+    inset 0 -1px 0.5px rgba(0, 0, 0, 0.08),             /* 底边暗影 */
+    inset 1px 0 0.5px rgba(255, 255, 255, 0.25),        /* 左边光 */
+    inset -1px 0 0.5px rgba(255, 255, 255, 0.25),       /* 右边光 */
+    /* ── 色差(chromatic aberration): 棱镜 RGB 偏移 ── */
+    inset 1px 0 0 rgba(255, 0, 80, 0.03),               /* 左红偏 */
+    inset -1px 0 0 rgba(0, 80, 255, 0.03),              /* 右蓝偏 */
+    inset 0 1px 0 rgba(255, 0, 80, 0.02),               /* 顶红偏 */
+    inset 0 -1px 0 rgba(0, 80, 255, 0.02),              /* 底蓝偏 */
+    /* ── 3D 厚度 + 投影 ── */
+    inset 0 0 20px rgba(255, 255, 255, 0.03),           /* 内部光雾 */
+    0 6px 20px rgba(0, 0, 0, 0.12),                     /* 主投影 */
+    0 2px 6px rgba(0, 0, 0, 0.08),                      /* 近投影 */
+    0 0 0 0.5px rgba(255, 255, 255, 0.15);              /* 外边缘光圈 */
 }
 
 :root[data-glass="true"] .bar {
   background: transparent;
-  z-index: 1;
+  z-index: 2;
 }
 
 :root[data-glass="true"] .panel {
-  background: transparent;
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  background: rgba(248, 250, 251, 0.03);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
-/* 环境光扫描 —— 模拟光线在玻璃表面的缓慢流动 */
+/* ── 镜面高光层(::before): 双斜向光带 ──
+   模拟光线在玻璃表面的反射,两条光带以不同速度扫过,
+   营造"玻璃有生命"的流动感 */
 :root[data-glass="true"] .shell::before {
   content: "";
   position: absolute;
@@ -69,24 +94,42 @@
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 30%,
-    rgba(255,255,255,0.06) 45%,
-    rgba(255,255,255,0.10) 50%,
-    rgba(255,255,255,0.06) 55%,
-    transparent 70%
-  );
-  background-size: 300% 100%;
-  animation: glassAmbientSweep 10s ease-in-out infinite;
+  /* 主光带: 宽幅白色斜向渐变 */
+  background:
+    linear-gradient(
+      115deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.04) 42%,
+      rgba(255, 255, 255, 0.12) 48%,
+      rgba(255, 255, 255, 0.18) 50%,
+      rgba(255, 255, 255, 0.12) 52%,
+      rgba(255, 255, 255, 0.04) 58%,
+      transparent 70%
+    );
+  background-size: 250% 100%;
+  animation: glassSweep 8s ease-in-out infinite;
 }
 
-@keyframes glassAmbientSweep {
-  0%   { background-position: 100% 50%; opacity: 0.4; }
-  25%  { opacity: 0.8; }
-  50%  { background-position: 0% 50%; opacity: 0.4; }
-  75%  { opacity: 0.8; }
-  100% { background-position: 100% 50%; opacity: 0.4; }
+/* ── 磨砂颗粒层(::after): SVG 噪点 + 边缘色差光晕 ──
+   feTurbulence 生成真实磨砂玻璃的颗粒感,
+   叠加边缘处的微弱彩虹色散 */
+:root[data-glass="true"] .shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  /* SVG fractalNoise 噪点纹理 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+}
+
+@keyframes glassSweep {
+  0%   { background-position: 100% 50%; }
+  50%  { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
 }
 
 * { box-sizing: border-box; }
