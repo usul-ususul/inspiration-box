@@ -967,15 +967,22 @@ fn set_expanded(
     app: AppHandle,
     expanded: bool,
     actions_expanded: Option<bool>,
+    more_open: Option<bool>,
 ) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("窗口不存在")?;
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
-    // 旧浮条曾有"展开快速操作"状态；新版把动作合并到"更多"菜单，此处不再改变宽度。
     let _ = actions_expanded;
+    let height = if expanded {
+        305.0
+    } else if more_open.unwrap_or(false) {
+        210.0
+    } else {
+        44.0
+    };
     window
-        .set_size(tauri::LogicalSize::new(320.0, if expanded { 305.0 } else { 44.0 }))
+        .set_size(tauri::LogicalSize::new(320.0, height))
         .map_err(|error| error.to_string())
 }
 

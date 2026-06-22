@@ -60,13 +60,13 @@ async function toggle(value = !expanded) {
   expanded = value;
   if (expanded) {
     panel.hidden = false;
-    await invoke("set_expanded", { expanded: true });
+    await invoke("set_expanded", { expanded: true, moreOpen });
     content.focus();
     return;
   }
   panel.hidden = true;
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await invoke("set_expanded", { expanded: false });
+  await invoke("set_expanded", { expanded: false, moreOpen });
 }
 
 function syncExpandMenuLabel() {
@@ -86,10 +86,13 @@ function setMoreOpen(value) {
     dragHandle.setAttribute("aria-expanded", "true");
     const firstItem = moreMenu.querySelector(".more-item");
     if (firstItem) firstItem.focus();
+    // 菜单弹出时需要增大窗口高度,避免被窗口边界裁剪
+    invoke("set_expanded", { expanded, moreOpen: true }).catch(() => {});
   } else {
     moreMenu.hidden = true;
     dragHandle.classList.remove("active");
     dragHandle.setAttribute("aria-expanded", "false");
+    invoke("set_expanded", { expanded, moreOpen: false }).catch(() => {});
   }
 }
 
@@ -339,7 +342,7 @@ resetQuickInput();
 loadAppearance();
 moreMenu.hidden = true;
 syncExpandMenuLabel();
-invoke("set_expanded", { expanded });
+invoke("set_expanded", { expanded, moreOpen });
 if (sessionStorage.getItem("focusQuickInput") === "1") {
   sessionStorage.removeItem("focusQuickInput");
   requestAnimationFrame(() => quickInput.focus());
