@@ -471,7 +471,7 @@ fn record_to_sticky(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
-    let (page_id, window_color, window_opacity, more_transparent, input_transparent) = state
+    let (page_id, window_color, window_opacity, more_transparent, input_transparent, enter_direct_save) = state
         .db
         .lock()
         .map(|db| {
@@ -481,6 +481,7 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
                 get_setting(&db, "window_opacity"),
                 get_setting(&db, "more_transparent"),
                 get_setting(&db, "input_transparent"),
+                get_setting(&db, "enter_direct_save"),
             )
         })
         .unwrap_or_default();
@@ -494,7 +495,8 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "windowColor": if window_color.is_empty() { "#f8fafb" } else { &window_color },
         "windowOpacity": if window_opacity.is_empty() { "1" } else { &window_opacity },
         "moreTransparent": more_transparent == "1",
-        "inputTransparent": input_transparent == "1"
+        "inputTransparent": input_transparent == "1",
+        "enterDirectSave": enter_direct_save == "1"
     })
 }
 
@@ -534,6 +536,7 @@ fn save_settings(
     window_opacity: String,
     more_transparent: bool,
     input_transparent: bool,
+    enter_direct_save: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
     let page_id = normalize_notion_page_id(&page_id)?;
@@ -584,6 +587,13 @@ fn save_settings(
         [if input_transparent { "1" } else { "0" }],
     )
     .map_err(|error| error.to_string())?;
+    db.execute(
+        "INSERT INTO settings(key,value)
+             VALUES('enter_direct_save',?1)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [if enter_direct_save { "1" } else { "0" }],
+    )
+    .map_err(|error| error.to_string())?;
     drop(db);
 
     if !token.trim().is_empty() {
@@ -606,7 +616,8 @@ fn save_settings(
             "windowColor": color,
             "windowOpacity": opacity,
             "moreTransparent": more_transparent,
-            "inputTransparent": input_transparent
+            "inputTransparent": input_transparent,
+            "enterDirectSave": enter_direct_save
         }),
     );
     Ok(())

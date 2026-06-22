@@ -16,6 +16,7 @@ let expanded = false;
 let moreOpen = false;
 let quickStep = "content";
 let pendingQuickContent = "";
+let enterDirectSave = false;
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -40,6 +41,7 @@ function applyAppearance(settings) {
   document.documentElement.dataset.shadowless = "true";
   document.documentElement.dataset.moreTransparent = settings.moreTransparent ? "true" : "false";
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";
+  enterDirectSave = Boolean(settings.enterDirectSave);
 }
 
 async function loadAppearance() {
@@ -71,12 +73,19 @@ function syncExpandMenuLabel() {
 
 function setMoreOpen(value) {
   moreOpen = value;
-  moreMenu.hidden = !value;
-  dragHandle.classList.toggle("active", value);
-  dragHandle.setAttribute("aria-expanded", String(value));
   if (value) {
+    const rect = dragHandle.getBoundingClientRect();
+    moreMenu.style.left = `${rect.left}px`;
+    moreMenu.style.top = `${rect.bottom + 2}px`;
+    moreMenu.hidden = false;
+    dragHandle.classList.add("active");
+    dragHandle.setAttribute("aria-expanded", "true");
     const firstItem = moreMenu.querySelector(".more-item");
     if (firstItem) firstItem.focus();
+  } else {
+    moreMenu.hidden = true;
+    dragHandle.classList.remove("active");
+    dragHandle.setAttribute("aria-expanded", "false");
   }
 }
 
@@ -118,6 +127,11 @@ async function saveCurrentRecord() {
     const text = quickInput.value.trim();
     if (!text && !imageData) {
       setStatus("Please enter content.");
+      return;
+    }
+    if (enterDirectSave) {
+      // 开启"回车直接保存" → 不进入类别选择,直接保存
+      await saveRecord(text, "");
       return;
     }
     pendingQuickContent = text;

@@ -278,6 +278,7 @@ async function loadSettings() {
   document.querySelector("#shadowless").checked = true; // 阴影始终关闭（新行为）
   document.querySelector("#moreTransparent").checked = Boolean(data.moreTransparent);
   document.querySelector("#inputTransparent").checked = Boolean(data.inputTransparent);
+  document.querySelector("#enterDirectSave").checked = Boolean(data.enterDirectSave);
   summonShortcutInput.value = await invoke("get_summon_shortcut");
 }
 
@@ -399,6 +400,7 @@ document.querySelector("#saveSettings").onclick = async () => {
       windowOpacity: document.querySelector("#windowOpacity").value,
       moreTransparent: document.querySelector("#moreTransparent").checked,
       inputTransparent: document.querySelector("#inputTransparent").checked,
+      enterDirectSave: document.querySelector("#enterDirectSave").checked,
     });
     document.querySelector("#settingsStatus").textContent = "已保存";
   });
