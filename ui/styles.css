@@ -32,12 +32,16 @@
     0 0 2px rgba(255,255,255,0.5);
 }
 
-/* 液态玻璃（毛玻璃）效果 */
+/* 液态玻璃（Apple Liquid Glass）效果 */
 :root[data-glass="true"] .shell {
-  background: rgba(248,250,251,0.12);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(248,250,251,0.08);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.3);
+  /* 边缘发光 */
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.12) inset,
+    var(--window-shadow, none);
 }
 
 :root[data-glass="true"] .bar {
@@ -46,8 +50,31 @@
 
 :root[data-glass="true"] .panel {
   background: transparent;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+}
+
+/* 鼠标跟随高光层 */
+.glass-glow {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+  /* 位置由 JS 通过 CSS 变量 control */
+  background: radial-gradient(
+    circle 120px at var(--glow-x, 50%) var(--glow-y, 50%),
+    rgba(255,255,255,0.35) 0%,
+    rgba(255,255,255,0.08) 40%,
+    transparent 70%
+  );
+  mix-blend-mode: overlay;
+  transition: background 0.05s;
+}
+
+:root[data-glass="true"] .glass-glow {
+  display: block;
 }
 
 * { box-sizing: border-box; }
@@ -71,6 +98,7 @@ body:not(.page):not(.sticky-body) {
 }
 
 .shell {
+  position: relative;
   width: 100%;
   height: 100%;
   background: #f8fafb;
