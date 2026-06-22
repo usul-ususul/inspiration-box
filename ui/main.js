@@ -18,12 +18,6 @@ let quickStep = "content";
 let pendingQuickContent = "";
 let enterDirectSave = false;
 
-/* 液态玻璃弹性鼠标跟随 */
-let glassSpringX = 50, glassSpringY = 50;
-let glassTargetX = 50, glassTargetY = 50;
-let glassAnimId = null;
-const GLASS_SPRING = 0.12;
-
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.className = isError ? "status error" : "status";
@@ -63,54 +57,7 @@ function applyAppearance(settings) {
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";
   document.documentElement.dataset.textStroke = settings.textStroke ? "true" : "false";
   enterDirectSave = Boolean(settings.enterDirectSave);
-  // 玻璃模式开关时启停弹性跟随
-  if (glass && !glassAnimId) startGlassGlow();
-  else if (!glass) stopGlassGlow();
 }
-
-/* ====== 液态玻璃弹性鼠标跟随 ====== */
-
-function updateGlassGlow() {
-  const el = document.getElementById("glassGlow");
-  if (!el || document.documentElement.dataset.glass !== "true") {
-    glassAnimId = null;
-    return;
-  }
-  // 弹簧插值
-  glassSpringX += (glassTargetX - glassSpringX) * GLASS_SPRING;
-  glassSpringY += (glassTargetY - glassSpringY) * GLASS_SPRING;
-  el.style.setProperty("--glow-x", glassSpringX + "%");
-  el.style.setProperty("--glow-y", glassSpringY + "%");
-  glassAnimId = requestAnimationFrame(updateGlassGlow);
-}
-
-function startGlassGlow() {
-  if (glassAnimId) return;
-  glassSpringX = glassTargetX;
-  glassSpringY = glassTargetY;
-  glassAnimId = requestAnimationFrame(updateGlassGlow);
-}
-
-function stopGlassGlow() {
-  if (glassAnimId) {
-    cancelAnimationFrame(glassAnimId);
-    glassAnimId = null;
-  }
-}
-
-// 仅当 glass 模式激活时追踪鼠标
-document.addEventListener("mousemove", (event) => {
-  if (document.documentElement.dataset.glass !== "true") {
-    stopGlassGlow();
-    return;
-  }
-  const shell = document.querySelector(".shell");
-  if (!shell) return;
-  const rect = shell.getBoundingClientRect();
-  glassTargetX = ((event.clientX - rect.left) / rect.width) * 100;
-  glassTargetY = ((event.clientY - rect.top) / rect.height) * 100;
-  startGlassGlow();
-}, { passive: true });
 
 async function loadAppearance() {
   try {
