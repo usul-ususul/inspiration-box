@@ -57,13 +57,6 @@ function applyAppearance(settings) {
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";
   document.documentElement.dataset.textStroke = settings.textStroke ? "true" : "false";
   enterDirectSave = Boolean(settings.enterDirectSave);
-  /* 玻璃模式: 启停 WebGL 渲染 */
-  if (glass) {
-    const canvas = document.getElementById("glassCanvas");
-    if (canvas && !glassAnimating) startGlassRender(canvas);
-  } else {
-    stopGlassRender();
-  }
 }
 
 async function loadAppearance() {
@@ -351,11 +344,6 @@ listen("records-changed", async () => {
   }
 });
 listen("appearance-changed", (event) => applyAppearance(event.payload || {}));
-listen("glass-frame", (event) => {
-  if (document.documentElement.dataset.glass === "true" && event.payload) {
-    updateGlassFrame(event.payload.data, event.payload.width, event.payload.height);
-  }
-});
 listen("summon-floating-bar", () => {
   quickInput.focus();
   quickInput.select();

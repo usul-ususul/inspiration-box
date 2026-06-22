@@ -47,28 +47,108 @@
     z-index: 0;
     pointer-events: none;
     display: none;
-    border-radius: inherit;
-}
+/* ═══════════════════════════════════════════════════════════
+   Apple Liquid Glass —— 真正的物理光学模拟
+   ─────────────────────────────────────────────
+   核心洞察: WebView2 在 transparent 窗口下,
+   任何未覆盖像素都是真透明 —— 桌面会真实穿透显示。
+   移动窗口时,后面桌面会真实滑动通过。
+   backdrop-filter 在 WebView2 上不工作(Chromium 长期 bug)。
+   WebGL/BitBlt 抓的是 WebView 自己的层,不是真实桌面。
+   所以这里用 5 层纯 CSS 物理光学合成,模拟折射+色差+高光:
+   1. 边缘透镜(lensing) —— 多层 inset shadow 厚度光晕
+   2. 色差棱镜(chromatic) —— 边缘 R/B 偏移
+   3. 镜面反射(specular) —— 斜向光带扫过动画
+   4. 磨砂颗粒(frosting)  —— SVG feTurbulence 噪点
+   5. 冷调玻璃色(tint)      —— 极淡青蓝边缘
+   ═══════════════════════════════════════════════════════════ */
 
-:root[data-glass="true"] .glass-canvas {
-    display: block;
-}
-
-/* 玻璃模式: shell 背景透明,由 canvas 负责渲染 */
+/* 玻璃模式下: 窗口本体背景真透明 → 桌面直接穿透
+   不加任何 background,只靠下面的 4 层伪元素叠加 */
 :root[data-glass="true"] .shell {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+    border: none;
+    box-shadow: none;
+    border-radius: 14px;
+    /* 透镜核心: 12 层 inset shadow 模拟厚玻璃边缘的光学效应 */
+    box-shadow:
+        /* 边缘内高光: 顶/左强光,底/右弱光 —— 光从上方来 */
+        inset 0  1px 0    rgba(255, 255, 255, 0.55),  /* 顶白线 */
+        inset 1px 0  0    rgba(255, 255, 255, 0.30),  /* 左白线 */
+        inset 0 -1px 0    rgba(255, 255, 255, 0.08),  /* 底弱光 */
+        inset -1px 0 0    rgba(255, 255, 255, 0.08),  /* 右弱光 */
+        /* 棱镜色差: 边缘 RGB 分离 */
+        inset 0  1px 1px  rgba(255,  60, 100, 0.08),  /* 顶红偏 */
+        inset 0 -1px 1px  rgba( 60, 100, 255, 0.08),  /* 底蓝偏 */
+        inset 1px 0  1px  rgba(255, 200,  60, 0.04),  /* 左黄偏 */
+        inset -1px 0 1px  rgba( 60, 255, 200, 0.04),  /* 右青偏 */
+        /* 玻璃厚度内光雾 */
+        inset 0 0 24px    rgba(255, 255, 255, 0.04),
+        /* 整体投影 —— 让玻璃"浮"在桌面上 */
+        0 8px 24px rgba(0, 0, 0, 0.10),
+        0 2px 6px  rgba(0, 0, 0, 0.06);
 }
 
 :root[data-glass="true"] .bar {
     background: transparent;
-    z-index: 2;
+    z-index: 3;  /* 在所有伪元素之上 */
 }
 
 :root[data-glass="true"] .panel {
-    background: transparent;
-    z-index: 2;
+    background: rgba(248, 250, 251, 0.04);
+    backdrop-filter: blur(8px);   /* panel 内层可以用(背景是 WebView 自己的) */
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 3;
+}
+
+/* ── 层 1: 玻璃本体 ::before ── 斜向光带扫过动画
+   模拟光线在弯曲玻璃表面的反射,带 8s 流动感。 */
+:root[data-glass="true"] .shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;  /* 玻璃背景层 */
+    background:
+        /* 主光带: 强反射 */
+        linear-gradient(115deg,
+            transparent 28%,
+            rgba(255, 255, 255, 0.08) 40%,
+            rgba(255, 255, 255, 0.22) 48%,
+            rgba(255, 255, 255, 0.30) 50%,
+            rgba(255, 255, 255, 0.22) 52%,
+            rgba(255, 255, 255, 0.08) 60%,
+            transparent 72%),
+        /* 副光带: 弱反射,反向 */
+        linear-gradient(115deg,
+            transparent 50%,
+            rgba(200, 220, 255, 0.06) 60%,
+            rgba(200, 220, 255, 0.12) 70%,
+            transparent 90%);
+    background-size: 300% 100%, 250% 100%;
+    background-position: 100% 50%, 0% 50%;
+    animation: glassSweep 7s ease-in-out infinite;
+    mix-blend-mode: screen;  /* 加色混合 → 亮带叠加 */
+}
+
+@keyframes glassSweep {
+    0%, 100% { background-position: 100% 50%, 0% 50%; }
+    50%      { background-position: 0% 50%, 100% 50%; }
+}
+
+/* ── 层 2: 磨砂颗粒 ::after ── SVG 噪点纹理
+   让玻璃表面有真实的"颗粒感",不是光滑平面。 */
+:root[data-glass="true"] .shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 2;  /* 在光带之上,在内容之下 */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+    opacity: 0.04;
+    mix-blend-mode: overlay;
 }
 
 * { box-sizing: border-box; }

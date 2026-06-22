@@ -25,113 +25,10 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use uuid::Uuid;
-use windows_sys::Win32::Foundation::*;
-use windows_sys::Win32::Graphics::Gdi::*;
 
 const NOTION_VERSION: &str = "2026-03-11";
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const DEFAULT_SUMMON_SHORTCUT: &str = "Ctrl+Alt+Space";
-
-static GLASS_ENABLED: AtomicBool = AtomicBool::new(false);
-
-/// 用 BitBlt 从屏幕 DC 抓取指定区域，返回 RGBA 像素数据
-fn capture_screen_region(x: i32, y: i32, w: i32, h: i32) -> Option<(Vec<u8>, i32, i32)> {
-    if w <= 0 || h <= 0 {
-        return None;
-    }
-    unsafe {
-        let null_hwnd = std::ptr::null_mut();
-        let hdc_screen = GetDC(null_hwnd);
-        if hdc_screen.is_null() {
-            return None;
-        }
-        let hdc_mem = CreateCompatibleDC(hdc_screen);
-        if hdc_mem.is_null() {
-            ReleaseDC(null_hwnd, hdc_screen);
-            return None;
-        }
-        let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
-        if hbmp.is_null() {
-            DeleteDC(hdc_mem);
-            ReleaseDC(null_hwnd, hdc_screen);
-            return None;
-        }
-        let old = SelectObject(hdc_mem, hbmp);
-
-        if BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, x, y, SRCCOPY) == 0 {
-            SelectObject(hdc_mem, old);
-            DeleteObject(hbmp);
-            DeleteDC(hdc_mem);
-            ReleaseDC(null_hwnd, hdc_screen);
-            return None;
-        }
-
-        let mut bi: BITMAPINFO = std::mem::zeroed();
-        bi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
-        bi.bmiHeader.biWidth = w;
-        bi.bmiHeader.biHeight = -h; // top-down
-        bi.bmiHeader.biPlanes = 1;
-        bi.bmiHeader.biBitCount = 32;
-        bi.bmiHeader.biCompression = 0; // BI_RGB
-
-        let mut pixels = vec![0u8; (w as usize) * (h as usize) * 4];
-        let result = GetDIBits(
-            hdc_mem,
-            hbmp,
-            0,
-            h as u32,
-            pixels.as_mut_ptr() as *mut _,
-            &mut bi,
-            DIB_RGB_COLORS,
-        );
-
-        // BGRA → RGBA
-        for chunk in pixels.chunks_exact_mut(4) {
-            chunk.swap(0, 2);
-        }
-
-        SelectObject(hdc_mem, old);
-        DeleteObject(hbmp);
-        DeleteDC(hdc_mem);
-        ReleaseDC(null_hwnd, hdc_screen);
-
-        if result == 0 {
-            return None;
-        }
-        Some((pixels, w, h))
-    }
-}
-
-/// 液态玻璃后台抓帧循环：~30fps 抓取窗口背后桌面画面，base64 编码后 emit 给前端
-async fn glass_capture_loop(app: AppHandle) {
-    loop {
-        if !GLASS_ENABLED.load(Ordering::Relaxed) {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            continue;
-        }
-
-        if let Some(window) = app.get_webview_window("main") {
-            let pos = window.outer_position().ok();
-            let size = window.outer_size().ok();
-            if let (Some(pos), Some(size)) = (pos, size) {
-                let x = pos.x;
-                let y = pos.y;
-                let w = size.width as i32;
-                let h = size.height as i32;
-
-                if let Some((pixels, pw, ph)) = capture_screen_region(x, y, w, h) {
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(&pixels);
-                    let _ = app.emit(
-                        "glass-frame",
-                        json!({ "data": b64, "width": pw, "height": ph }),
-                    );
-                }
-            }
-        }
-
-        tokio::time::sleep(Duration::from_millis(33)).await; // ~30fps
-    }
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -746,7 +643,6 @@ fn save_settings(
             "glassMode": glass_mode
         }),
     );
-    GLASS_ENABLED.store(glass_mode, Ordering::Relaxed);
     Ok(())
 }
 
@@ -1634,7 +1530,6 @@ fn main() {
             app.autolaunch().enable().ok();
             tauri::async_runtime::spawn(sync_loop(app.handle().clone()));
             tauri::async_runtime::spawn(update_check_loop(app.handle().clone()));
-            tauri::async_runtime::spawn(glass_capture_loop(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
