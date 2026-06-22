@@ -40,19 +40,20 @@ fn capture_screen_region(x: i32, y: i32, w: i32, h: i32) -> Option<(Vec<u8>, i32
         return None;
     }
     unsafe {
-        let hdc_screen = GetDC(0);
-        if hdc_screen == 0 {
+        let null_hwnd = std::ptr::null_mut();
+        let hdc_screen = GetDC(null_hwnd);
+        if hdc_screen.is_null() {
             return None;
         }
         let hdc_mem = CreateCompatibleDC(hdc_screen);
-        if hdc_mem == 0 {
-            ReleaseDC(0, hdc_screen);
+        if hdc_mem.is_null() {
+            ReleaseDC(null_hwnd, hdc_screen);
             return None;
         }
         let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
-        if hbmp == 0 {
+        if hbmp.is_null() {
             DeleteDC(hdc_mem);
-            ReleaseDC(0, hdc_screen);
+            ReleaseDC(null_hwnd, hdc_screen);
             return None;
         }
         let old = SelectObject(hdc_mem, hbmp);
@@ -61,7 +62,7 @@ fn capture_screen_region(x: i32, y: i32, w: i32, h: i32) -> Option<(Vec<u8>, i32
             SelectObject(hdc_mem, old);
             DeleteObject(hbmp);
             DeleteDC(hdc_mem);
-            ReleaseDC(0, hdc_screen);
+            ReleaseDC(null_hwnd, hdc_screen);
             return None;
         }
 
@@ -92,7 +93,7 @@ fn capture_screen_region(x: i32, y: i32, w: i32, h: i32) -> Option<(Vec<u8>, i32
         SelectObject(hdc_mem, old);
         DeleteObject(hbmp);
         DeleteDC(hdc_mem);
-        ReleaseDC(0, hdc_screen);
+        ReleaseDC(null_hwnd, hdc_screen);
 
         if result == 0 {
             return None;
