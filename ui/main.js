@@ -31,13 +31,17 @@ function hexToRgba(hex, opacity) {
   const red = parseInt(value.slice(0, 2), 16);
   const green = parseInt(value.slice(2, 4), 16);
   const blue = parseInt(value.slice(4, 6), 16);
-  const alpha = Math.min(1, Math.max(0.35, Number(opacity || 1)));
+  const alpha = Math.min(1, Math.max(0, Number(opacity || 1)));
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function applyAppearance(settings) {
   shell.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
   panel.style.backgroundColor = hexToRgba(settings.windowColor, settings.windowOpacity);
+  // 边框颜色跟随透明度——全透明时边框也透明,不留下白边
+  const alpha = Number(settings.windowOpacity || 1);
+  document.documentElement.style.setProperty("--shell-border",
+    alpha < 0.05 ? "transparent" : hexToRgba(settings.windowColor, alpha));
   document.documentElement.dataset.shadowless = "true";
   document.documentElement.dataset.moreTransparent = settings.moreTransparent ? "true" : "false";
   document.documentElement.dataset.inputTransparent = settings.inputTransparent ? "true" : "false";

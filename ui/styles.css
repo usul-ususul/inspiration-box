@@ -1,13 +1,13 @@
 :root {
   font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #263238;
-  /* 阴影统一通过 [data-shadowless] 关闭；为兼容旧值仍保留默认透明壳 */
   --window-shadow: 0 10px 26px #26323828;
   --menu-shadow: 0 8px 22px #26323830;
   --panel-bg: #f8fafb;
   --input-bg: #fff;
   --textarea-bg: #ffffff;
   --more-bg: #f8fafb;
+  --shell-border: #dbe4e7;
 }
 
 :root[data-shadowless="true"] {
@@ -48,7 +48,7 @@ body:not(.page):not(.sticky-body) {
   width: 100%;
   height: 100%;
   background: #f8fafb;
-  border: 1px solid #dbe4e7;
+  border: 1px solid var(--shell-border, #dbe4e7);
   border-radius: 14px;
   box-shadow: none;
   overflow: hidden;
@@ -209,21 +209,22 @@ body:not(.page):not(.sticky-body) {
   min-width: 0;
   margin-left: 0;
   height: 30px;
-  border: 1px solid #cedadd;
-  border-radius: 9px;
-  padding: 5px 9px;
+  border: none;
+  outline: none;
+  border-radius: 7px;
+  padding: 0 9px;
   font: inherit;
   font-size: 13px;
   background: var(--input-bg, #fff);
 }
 
 .quick-input:focus {
-  outline: 2px solid #8fc7bd;
-  border-color: #3b7469;
+  /* 无边框聚焦效果：只加一条下划线 */
+  box-shadow: inset 0 -2px 0 #8fc7bd;
 }
 
 .quick-input.category-mode {
-  border-color: #d99b3b;
+  box-shadow: inset 0 -2px 0 #d99b3b;
   background: #fff9ef;
 }
 

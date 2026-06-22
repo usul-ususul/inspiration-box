@@ -543,7 +543,7 @@ fn save_settings(
     let opacity = window_opacity
         .parse::<f32>()
         .unwrap_or(1.0)
-        .clamp(0.35, 1.0)
+        .clamp(0.0, 1.0)
         .to_string();
     let color = if window_color.trim().is_empty() {
         "#f8fafb".to_string()
